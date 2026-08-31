@@ -39,10 +39,11 @@ Pré-requisitos: [uv](https://docs.astral.sh/uv/), Docker e credenciais AWS com
 acesso ao Amazon Bedrock (`aws configure`).
 
 ```bash
-uv sync                     # cria o .venv e instala as dependências
-cp .env.example .env        # ajuste se necessário
-docker compose up -d        # sobe o Qdrant em localhost:6333
-uv run pytest               # roda os testes
+uv sync                              # cria o .venv e instala as dependências
+cp .env.example .env                 # ajuste se necessário
+docker compose up -d                 # sobe o Qdrant em localhost:6333
+uv run pytest                        # roda os testes
+uv run python scripts/ingest.py      # indexa docs/sources/ no Qdrant (requer AWS/Bedrock)
 ```
 
 Skills do Claude Code: a pasta `.claude/skills/` é gitignored — rode o script em

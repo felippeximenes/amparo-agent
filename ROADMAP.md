@@ -21,7 +21,7 @@ trabalho.
   - Cartas de Serviço gov.br (BPC ao idoso e BPC à PcD)
   - Pendente: Portaria Conjunta MDS/MPS/INSS nº 33/2025 (sem URL oficial do texto integral)
 - [x] Estruturar os documentos em `docs/sources/` (texto limpo, com metadata de fonte e data de coleta) — 15 arquivos criados (`01-*.md` a `15-*.md`); índice no `docs/sources/README.md`
-- [ ] Escrever script de ingestão (chunking + embeddings) para o Qdrant
+- [x] Escrever script de ingestão (chunking + embeddings) para o Qdrant — `scripts/ingest.py` + `src/amparo/corpus.py` (parse/chunk puros, com teste); chunk por dispositivo (Art./§/heading), payload com titulo/fonte/tipo para citação automática. **Falta rodar** (`docker compose up -d` + `uv run python scripts/ingest.py`) — depende de credenciais AWS/Bedrock.
 - [ ] Validar a recuperação (RAG) com um conjunto de perguntas de teste
 
 ## Fase 2 — Núcleo do agente (LangGraph)
