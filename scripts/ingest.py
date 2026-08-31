@@ -2,9 +2,9 @@
 
 Uso:  uv run python scripts/ingest.py
 
-Roda 100% local: embeddings via fastembed (baixa o modelo na 1ª execução) e
-Qdrant em modo arquivo (`settings.qdrant_path`). Recria a coleção do zero a
-cada execução — o corpus é curado à mão e pequeno.
+Roda 100% local: embeddings via fastembed (baixa o modelo na 1ª execução, cache
+em `settings.fastembed_cache`) e Qdrant em modo arquivo (`settings.qdrant_path`).
+Recria a coleção do zero a cada execução — o corpus é curado à mão e pequeno.
 """
 
 import sys
@@ -33,11 +33,22 @@ def main() -> None:
         print(f"{f.name}: {len(c)} trechos")
     print(f"total: {len(chunks)} trechos")
 
-    model = TextEmbedding(model_name=settings.embedding_model)
-    vectors = [v.tolist() for v in model.passage_embed([c["texto"] for c in chunks])]
+    print(f"carregando modelo {settings.embedding_model} ...")
+    model = TextEmbedding(
+        model_name=settings.embedding_model, cache_dir=settings.fastembed_cache
+    )
+
+    print("gerando embeddings ...")
+    vectors: list[list[float]] = []
+    for i, v in enumerate(model.passage_embed([c["texto"] for c in chunks]), start=1):
+        vectors.append(v.tolist())
+        if i % 25 == 0 or i == len(chunks):
+            print(f"  {i}/{len(chunks)}")
 
     qc = QdrantClient(path=settings.qdrant_path)
-    qc.recreate_collection(
+    if qc.collection_exists(settings.qdrant_collection):
+        qc.delete_collection(settings.qdrant_collection)
+    qc.create_collection(
         settings.qdrant_collection,
         vectors_config=models.VectorParams(
             size=len(vectors[0]), distance=models.Distance.COSINE
@@ -50,8 +61,9 @@ def main() -> None:
             for i, (v, c) in enumerate(zip(vectors, chunks))
         ],
     )
+    total = qc.count(settings.qdrant_collection).count
     print(
-        f"indexado: {len(chunks)} trechos em '{settings.qdrant_collection}' "
+        f"indexado: {total} trechos em '{settings.qdrant_collection}' "
         f"({settings.qdrant_path})"
     )
 

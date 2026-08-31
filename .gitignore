@@ -45,3 +45,5 @@ Thumbs.db
 
 # --- Índice local do Qdrant (regenerável via scripts/ingest.py) ---
 qdrant_data/
+# --- Cache dos modelos de embedding (fastembed) ---
+.fastembed_cache/
