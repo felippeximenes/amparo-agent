@@ -43,7 +43,7 @@ def main() -> None:
 
     print("gerando embeddings ...")
     vectors: list[list[float]] = []
-    for i, v in enumerate(model.passage_embed([c["texto"] for c in chunks]), start=1):
+    for i, v in enumerate(model.passage_embed([c["embed_text"] for c in chunks]), start=1):
         vectors.append(v.tolist())
         if i % 25 == 0 or i == len(chunks):
             print(f"  {i}/{len(chunks)}")
@@ -60,7 +60,11 @@ def main() -> None:
     qc.upsert(
         settings.qdrant_collection,
         points=[
-            models.PointStruct(id=i, vector=v, payload=c)
+            models.PointStruct(
+                id=i,
+                vector=v,
+                payload={k: val for k, val in c.items() if k != "embed_text"},
+            )
             for i, (v, c) in enumerate(zip(vectors, chunks))
         ],
     )

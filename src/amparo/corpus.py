@@ -63,15 +63,19 @@ def chunk(meta: dict[str, str], body: str, arquivo: str) -> list[dict]:
         else:
             merged.append(carry)
 
+    titulo = meta.get("titulo", "")
     return [
         {
             "arquivo": arquivo,
-            "titulo": meta.get("titulo", ""),
+            "titulo": titulo,
             "fonte": meta.get("fonte", ""),
             "tipo": meta.get("tipo", ""),
             "coletado_em": meta.get("coletado_em", ""),
             "trecho": text.splitlines()[0].lstrip("# ").rstrip(".")[:80],
             "texto": text,
+            # texto que vai para o embedding: prefixado com o título da fonte
+            # para o vetor discriminar de qual norma é o trecho.
+            "embed_text": f"{titulo}\n\n{text}" if titulo else text,
         }
         for text in merged
     ]
