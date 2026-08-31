@@ -1,0 +1,33 @@
+# --- Claude Code ---
+# Skills vendorizadas de terceiros — re-baixar via .claude/SKILLS_NOTES.md
+.claude/skills/
+# Config pessoal / local do Claude Code
+.claude/settings.local.json
+.claude/.session*
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# --- Env / segredos ---
+.env
+.env.local
+.env.*.local
+
+# --- Build / cache ---
+dist/
+build/
+.next/
+out/
+.cache/
+coverage/
+
+# --- Editores / SO ---
+.DS_Store
+Thumbs.db
+.idea/
+*.log
