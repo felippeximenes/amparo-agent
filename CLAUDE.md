@@ -63,6 +63,28 @@ LangGraph:
 - `ROADMAP.md` é a fonte de verdade do que já foi feito — atualize os
   checkboxes conforme o trabalho avança, não deixe a lista ficar desatualizada.
 
+## Skills
+
+Este projeto tem skills vendorizadas em `.claude/skills/` (lista completa e script
+de sync em `.claude/SKILLS_NOTES.md` — a pasta é gitignored, rode o script depois
+de clonar, senão as skills não existem localmente).
+
+Antes de qualquer tarefa não trivial (implementar uma feature, revisar código,
+modelar uma regra de domínio, investigar um bug), verifique se existe uma skill
+aplicável e use-a em vez de resolver no genérico. Nesta fase do projeto
+(backend/agente), as mais relevantes são:
+
+- `research` — antes de fechar a curadoria de fontes oficiais do BPC/LOAS
+- `domain-modeling` — ao desenhar as regras de elegibilidade
+- `implement` / `tdd` — ao construir os nodes do LangGraph e o motor de regras
+- `code-review` — antes de considerar qualquer entrega de fase concluída
+- `ponytail` — pra manter o escopo enxuto, sem abstração especulativa antes da hora
+- `diagnosing-bugs` / `improve-codebase-architecture` — quando algo quebrar ou o design travar
+
+As skills de frontend/animação (`frontend-design`, `apple-design`, `impeccable`,
+`animate*`, etc.) só entram na Fase 3 (Interface) do `ROADMAP.md` — não são
+relevantes nas fases 0–2.
+
 ## Fora de escopo por enquanto
 
 - Autenticação / contas de usuário
