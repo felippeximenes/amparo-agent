@@ -1,0 +1,18 @@
+[project]
+name = "amparo"
+version = "0.1.0"
+description = "Agente de IA (LangGraph + RAG) que orienta sobre o BPC/LOAS"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.2",
+    "qdrant-client>=1.12",
+    "boto3>=1.35",
+    "pydantic-settings>=2.5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

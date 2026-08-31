@@ -7,10 +7,10 @@ trabalho.
 
 ## Fase 0 — Fundação
 
-- [ ] Confirmar stack final (Python + LangGraph + Qdrant + Bedrock + Postgres/Neon)
-- [ ] Criar estrutura de pastas (`src/`, `docs/sources/`, `tests/`)
-- [ ] Escrever o texto padrão do disclaimer legal (usado em toda resposta do agente)
-- [ ] Configurar ambiente local (`.env.example`, dependências, `README` de setup)
+- [x] Confirmar stack final — Python 3.12 + LangGraph + Qdrant + Bedrock (Titan Embeddings v2 + Claude). Postgres/Neon adiado para a Fase 2 (persistência de sessão); nada de banco nesta fase.
+- [x] Criar estrutura de pastas (`src/amparo/`, `tests/`; `docs/sources/` já existe)
+- [x] Escrever o texto padrão do disclaimer legal — `src/amparo/disclaimer.py` (+ teste)
+- [x] Configurar ambiente local — `pyproject.toml`, `.python-version`, `.env.example`, `docker-compose.yml` (Qdrant), seção "Rodando localmente" no `README.md`
 
 ## Fase 1 — Curadoria de conteúdo (RAG)
 

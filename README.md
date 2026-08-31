@@ -33,6 +33,21 @@ fonte usada.
 - **Postgres (Neon)** — estado de sessão, sem dado sensível persistido
 - **AWS SAM** — deploy serverless
 
+## Rodando localmente
+
+Pré-requisitos: [uv](https://docs.astral.sh/uv/), Docker e credenciais AWS com
+acesso ao Amazon Bedrock (`aws configure`).
+
+```bash
+uv sync                     # cria o .venv e instala as dependências
+cp .env.example .env        # ajuste se necessário
+docker compose up -d        # sobe o Qdrant em localhost:6333
+uv run pytest               # roda os testes
+```
+
+Skills do Claude Code: a pasta `.claude/skills/` é gitignored — rode o script em
+`.claude/SKILLS_NOTES.md` depois de clonar.
+
 ## Status
 
 Consulte [`ROADMAP.md`](./ROADMAP.md) para o progresso atual do projeto.
