@@ -7,8 +7,11 @@ em `settings.fastembed_cache`) e Qdrant em modo arquivo (`settings.qdrant_path`)
 Recria a coleção do zero a cada execução — o corpus é curado à mão e pequeno.
 """
 
+import os
 import sys
 from pathlib import Path
+
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient, models
