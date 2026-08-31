@@ -48,8 +48,11 @@ LangGraph:
 ```
 
 - **RAG**: Qdrant sobre corpus curado manualmente. Não usar crawler automático
-  — neste domínio precisão importa mais que cobertura.
-- **Modelo**: Amazon Bedrock, com fallback (mesmo padrão do `certara-agent`).
+  — neste domínio precisão importa mais que cobertura. Embeddings **locais**
+  (`fastembed`, modelo multilíngue) — a busca não depende de API externa; no
+  dev o Qdrant roda em modo arquivo (`./qdrant_data/`).
+- **Modelo (LLM)**: Amazon Bedrock, com fallback (mesmo padrão do
+  `certara-agent`). Entra só na Fase 2 — não é usado no RAG.
 - **Estado de sessão**: Postgres (Neon), sem dado sensível persistido.
 - **Deploy**: AWS SAM (mesmo padrão do `certara-agent`), quando o projeto
   chegar na fase de deploy.

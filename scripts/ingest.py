@@ -2,16 +2,15 @@
 
 Uso:  uv run python scripts/ingest.py
 
-Recria a coleção do zero a cada execução — o corpus é curado à mão e pequeno.
-Requer Qdrant no ar (docker compose up -d) e credenciais AWS com acesso ao
-Amazon Bedrock.
+Roda 100% local: embeddings via fastembed (baixa o modelo na 1ª execução) e
+Qdrant em modo arquivo (`settings.qdrant_path`). Recria a coleção do zero a
+cada execução — o corpus é curado à mão e pequeno.
 """
 
-import json
 import sys
 from pathlib import Path
 
-import boto3
+from fastembed import TextEmbedding
 from qdrant_client import QdrantClient, models
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -19,15 +18,6 @@ from amparo.config import settings  # noqa: E402
 from amparo.corpus import chunk, parse_source  # noqa: E402
 
 SOURCES = Path(__file__).resolve().parents[1] / "docs" / "sources"
-_bedrock = boto3.client("bedrock-runtime", region_name=settings.aws_region)
-
-
-def embed(text: str) -> list[float]:
-    resp = _bedrock.invoke_model(
-        modelId=settings.bedrock_embedding_model_id,
-        body=json.dumps({"inputText": text}),
-    )
-    return json.loads(resp["body"].read())["embedding"]
 
 
 def main() -> None:
@@ -43,9 +33,10 @@ def main() -> None:
         print(f"{f.name}: {len(c)} trechos")
     print(f"total: {len(chunks)} trechos")
 
-    vectors = [embed(c["texto"]) for c in chunks]
+    model = TextEmbedding(model_name=settings.embedding_model)
+    vectors = [v.tolist() for v in model.passage_embed([c["texto"] for c in chunks])]
 
-    qc = QdrantClient(url=settings.qdrant_url)
+    qc = QdrantClient(path=settings.qdrant_path)
     qc.recreate_collection(
         settings.qdrant_collection,
         vectors_config=models.VectorParams(
@@ -59,7 +50,10 @@ def main() -> None:
             for i, (v, c) in enumerate(zip(vectors, chunks))
         ],
     )
-    print(f"indexado em '{settings.qdrant_collection}' @ {settings.qdrant_url}")
+    print(
+        f"indexado: {len(chunks)} trechos em '{settings.qdrant_collection}' "
+        f"({settings.qdrant_path})"
+    )
 
 
 if __name__ == "__main__":

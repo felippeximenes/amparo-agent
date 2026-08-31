@@ -4,10 +4,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    qdrant_url: str = "http://localhost:6333"
+    # Qdrant em modo local (arquivo) — sem servidor/Docker no dev.
+    qdrant_path: str = "./qdrant_data"
     qdrant_collection: str = "amparo_bpc"
-    aws_region: str = "us-east-1"
-    bedrock_embedding_model_id: str = "amazon.titan-embed-text-v2:0"
+
+    # Embedding roda localmente (fastembed). O MESMO modelo precisa ser usado
+    # na ingestão e na consulta do RAG.
+    embedding_model: str = "intfloat/multilingual-e5-large"
 
 
 settings = Settings()

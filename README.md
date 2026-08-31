@@ -35,16 +35,17 @@ fonte usada.
 
 ## Rodando localmente
 
-Pré-requisitos: [uv](https://docs.astral.sh/uv/), Docker e credenciais AWS com
-acesso ao Amazon Bedrock (`aws configure`).
+Pré-requisito: [uv](https://docs.astral.sh/uv/). Nesta fase tudo roda local —
+sem Docker e sem contas em nuvem.
 
 ```bash
 uv sync                              # cria o .venv e instala as dependências
-cp .env.example .env                 # ajuste se necessário
-docker compose up -d                 # sobe o Qdrant em localhost:6333
 uv run pytest                        # roda os testes
-uv run python scripts/ingest.py      # indexa docs/sources/ no Qdrant (requer AWS/Bedrock)
+uv run python scripts/ingest.py      # indexa docs/sources/ (baixa o modelo de embedding na 1ª vez)
 ```
+
+O RAG usa embeddings locais (`fastembed`) e o Qdrant em modo arquivo
+(`./qdrant_data/`). O Amazon Bedrock só entra na Fase 2, para o LLM.
 
 Skills do Claude Code: a pasta `.claude/skills/` é gitignored — rode o script em
 `.claude/SKILLS_NOTES.md` depois de clonar.

@@ -42,3 +42,6 @@ Thumbs.db
 
 # --- Fontes brutas do RAG (manter só o texto curado em docs/sources/) ---
 *.pdf
+
+# --- Índice local do Qdrant (regenerável via scripts/ingest.py) ---
+qdrant_data/

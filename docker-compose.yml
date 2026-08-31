@@ -1,3 +1,6 @@
+# Opcional. O dev roda o Qdrant em modo local (arquivo), sem este serviço.
+# Útil para inspecionar o índice no dashboard (http://localhost:6333/dashboard)
+# ou como base para o deploy.
 services:
   qdrant:
     image: qdrant/qdrant:latest
