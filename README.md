@@ -42,6 +42,7 @@ sem Docker e sem contas em nuvem.
 uv sync                              # cria o .venv e instala as dependências
 uv run pytest                        # roda os testes
 uv run python scripts/ingest.py      # indexa docs/sources/ (baixa o modelo de embedding na 1ª vez)
+uv run python scripts/eval_retrieval.py   # valida a recuperação (recall@k) contra 20 perguntas
 ```
 
 O RAG usa embeddings locais (`fastembed`) e o Qdrant em modo arquivo

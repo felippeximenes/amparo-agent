@@ -22,7 +22,7 @@ trabalho.
   - Pendente: Portaria Conjunta MDS/MPS/INSS nº 33/2025 (sem URL oficial do texto integral)
 - [x] Estruturar os documentos em `docs/sources/` (texto limpo, com metadata de fonte e data de coleta) — 15 arquivos criados (`01-*.md` a `15-*.md`); índice no `docs/sources/README.md`
 - [x] Escrever script de ingestão (chunking + embeddings) para o Qdrant — `scripts/ingest.py` + `src/amparo/corpus.py` (parse/chunk puros, com teste); chunk por dispositivo (Art./§/heading), payload com titulo/fonte/tipo para citação automática. Roda 100% local: `fastembed` (embeddings) + Qdrant em modo arquivo. **Falta rodar** `uv run python scripts/ingest.py`.
-- [ ] Validar a recuperação (RAG) com um conjunto de perguntas de teste
+- [ ] Validar a recuperação (RAG) com um conjunto de perguntas de teste — `scripts/eval_retrieval.py` (20 perguntas com fonte esperada, recall@k). **Falta rodar e ajustar** o corpus/modelo se o recall vier baixo.
 
 ## Fase 2 — Núcleo do agente (LangGraph)
 
