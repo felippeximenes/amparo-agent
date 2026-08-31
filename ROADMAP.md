@@ -14,12 +14,13 @@ trabalho.
 
 ## Fase 1 — Curadoria de conteúdo (RAG)
 
-- [ ] Selecionar 15–20 fontes oficiais sobre BPC/LOAS:
-  - Lei Orgânica da Assistência Social (Lei 8.742/93) e alterações
-  - Decreto 6.214/2007 (regulamenta o BPC)
-  - Instruções Normativas do INSS sobre BPC
-  - Manuais oficiais do Meu INSS / gov.br/inss
-- [ ] Estruturar os documentos em `docs/sources/` (texto limpo, com metadata de fonte e data de coleta)
+- [x] Selecionar 15–20 fontes oficiais sobre BPC/LOAS — 15 selecionadas e validadas; levantamento em `docs/research/bpc-loas-fontes-oficiais.md`:
+  - Lei Orgânica da Assistência Social (Lei 8.742/93) e alterações (Leis 13.146/2015, 13.982/2020, 14.176/2021, 15.077/2024; Estatuto da Pessoa Idosa; CF/1988 arts. 203-204)
+  - Decreto 6.214/2007 (regulamenta o BPC), Decreto 12.534/2025 e Decreto 11.016/2022 (CadÚnico)
+  - IN PRES/INSS nº 128/2022 (recorte) e Portarias Conjuntas MDS/INSS nº 34/2025 e nº 2/2015
+  - Cartas de Serviço gov.br (BPC ao idoso e BPC à PcD)
+  - Pendente: Portaria Conjunta MDS/MPS/INSS nº 33/2025 (sem URL oficial do texto integral)
+- [x] Estruturar os documentos em `docs/sources/` (texto limpo, com metadata de fonte e data de coleta) — 15 arquivos criados (`01-*.md` a `15-*.md`); índice no `docs/sources/README.md`
 - [ ] Escrever script de ingestão (chunking + embeddings) para o Qdrant
 - [ ] Validar a recuperação (RAG) com um conjunto de perguntas de teste
 
