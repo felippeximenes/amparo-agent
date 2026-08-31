@@ -42,5 +42,4 @@ def test_chunk_por_dispositivo(tmp_path):
     assert all(c["fonte"] == "https://exemplo.gov.br/lei" for c in chunks)
     assert all(c["arquivo"] == "x.md" for c in chunks)
     assert all("Curadoria" not in c["texto"] for c in chunks)
-    # o texto que vai para o embedding é prefixado com o título da fonte
-    assert all(c["embed_text"].startswith("Lei Teste\n\n") for c in chunks)
+    assert all(len(c["texto"]) <= 700 for c in chunks)  # trechos curtos p/ o embedding

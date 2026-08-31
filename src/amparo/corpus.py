@@ -1,9 +1,13 @@
 """Leitura e fatiamento das fontes curadas de `docs/sources/`.
 
 Funções puras (sem I/O de rede): `parse_source` separa o cabeçalho YAML do
-corpo; `chunk` quebra o corpo por dispositivo (Art. / § / heading), mantendo a
-metadata da fonte em cada trecho para a citação obrigatória (regra nº 2 do
-CLAUDE.md).
+corpo; `chunk` quebra o corpo em trechos pequenos (um dispositivo ou parte de
+um), cada um com a metadata da fonte no payload para a citação obrigatória
+(regra nº 2 do CLAUDE.md).
+
+Os trechos são limitados a ~`_MAX_CHARS` caracteres porque os modelos de
+embedding multilíngues leves truncam em ~128 tokens — um trecho maior que isso
+seria só parcialmente vetorizado.
 """
 
 from __future__ import annotations
@@ -11,12 +15,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-# Início de um novo trecho: artigo, parágrafo único, heading markdown ou
-# divisão estrutural da norma.
+# Início de um novo dispositivo / divisão estrutural da norma.
 _BOUNDARY = re.compile(
     r"^(Art\. \d|Parágrafo único|## |CAPÍTULO|SEÇÃO|SECÃO|TÍTULO|LIVRO|ANEXO)"
 )
-_MIN_CHUNK = 80  # trechos menores que isto são mesclados no seguinte
+_MAX_CHARS = 500  # ~128 tokens do modelo de embedding
+_MIN_CHARS = 80   # abaixo disto, funde no trecho seguinte
 
 
 def parse_source(path: str | Path) -> tuple[dict[str, str], str]:
@@ -33,49 +37,65 @@ def parse_source(path: str | Path) -> tuple[dict[str, str], str]:
     return meta, body.strip()
 
 
+def _split_block(block: str) -> list[str]:
+    """Quebra um bloco grande em pedaços <= _MAX_CHARS, nos limites de frase."""
+    if len(block) <= _MAX_CHARS:
+        return [block]
+    pieces, cur = [], ""
+    for sentence in re.split(r"(?<=[.;:])\s+", block):
+        if cur and len(cur) + len(sentence) + 1 > _MAX_CHARS:
+            pieces.append(cur)
+            cur = sentence
+        else:
+            cur = f"{cur} {sentence}".strip()
+    if cur:
+        pieces.append(cur)
+    return pieces
+
+
 def chunk(meta: dict[str, str], body: str, arquivo: str) -> list[dict]:
-    """Quebra o corpo em trechos, cada um com a metadata da fonte no payload."""
-    blocks = [b.strip() for b in body.split("\n\n") if b.strip()]
-    groups: list[list[str]] = []
+    """Quebra o corpo em trechos curtos, cada um com a metadata da fonte."""
+    blocks = [
+        b.strip()
+        for b in body.split("\n\n")
+        if b.strip() and not b.lstrip().startswith(">")  # ignora nota de curadoria
+    ]
+
+    texts: list[str] = []
+    buf = ""
+    label = ""  # "Art. 20", "O que é?", ... — repetido nos sub-trechos do dispositivo
+
+    def flush() -> None:
+        nonlocal buf
+        t = buf.strip()
+        if t:
+            if label and not t.startswith(label):
+                t = f"{label} — {t}"
+            texts.append(t)
+        buf = ""
+
     for block in blocks:
-        if block.startswith(">"):  # nota de curadoria, não é texto-fonte
-            continue
-        if not groups or _BOUNDARY.match(block):
-            groups.append([block])
-        else:
-            groups[-1].append(block)
+        if _BOUNDARY.match(block):
+            if len(buf) >= _MIN_CHARS:
+                flush()
+            m = re.match(r"(Art\. \d+(?:-[A-Z])?|Parágrafo único)", block)
+            label = m.group(1) if m else block.lstrip("# ").split("\n", 1)[0][:48].strip()
 
-    texts = ["\n\n".join(g).strip() for g in groups]
+        for piece in _split_block(block):
+            if buf and len(buf) + len(piece) + 2 > _MAX_CHARS:
+                flush()
+            buf = f"{buf}\n\n{piece}".strip() if buf else piece
+    flush()
 
-    # mescla trechos curtos (headings soltos) no trecho seguinte
-    merged: list[str] = []
-    carry = ""
-    for t in texts:
-        t = f"{carry}\n\n{t}".strip() if carry else t
-        if len(t) < _MIN_CHUNK:
-            carry = t
-        else:
-            merged.append(t)
-            carry = ""
-    if carry:
-        if merged:
-            merged[-1] = f"{merged[-1]}\n\n{carry}"
-        else:
-            merged.append(carry)
-
-    titulo = meta.get("titulo", "")
     return [
         {
             "arquivo": arquivo,
-            "titulo": titulo,
+            "titulo": meta.get("titulo", ""),
             "fonte": meta.get("fonte", ""),
             "tipo": meta.get("tipo", ""),
             "coletado_em": meta.get("coletado_em", ""),
-            "trecho": text.splitlines()[0].lstrip("# ").rstrip(".")[:80],
-            "texto": text,
-            # texto que vai para o embedding: prefixado com o título da fonte
-            # para o vetor discriminar de qual norma é o trecho.
-            "embed_text": f"{titulo}\n\n{text}" if titulo else text,
+            "trecho": t.splitlines()[0][:80],
+            "texto": t,
         }
-        for text in merged
+        for t in texts
     ]
