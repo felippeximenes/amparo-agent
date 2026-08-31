@@ -9,10 +9,10 @@ class Settings(BaseSettings):
     qdrant_collection: str = "amparo_bpc"
 
     # Embedding roda localmente (fastembed). O MESMO modelo precisa ser usado
-    # na ingestão e na consulta do RAG. e5-large multilíngue: ~2.25 GB, baixado
-    # uma vez para fastembed_cache. Alternativa leve para dev:
-    # "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2".
-    embedding_model: str = "intfloat/multilingual-e5-large"
+    # na ingestão e na consulta do RAG. MiniLM multilíngue: ~470 MB, roda em
+    # CPU modesto. (e5-large dá recuperação melhor, mas trava a inferência
+    # neste hardware.)
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     fastembed_cache: str = "./.fastembed_cache"
 
 
