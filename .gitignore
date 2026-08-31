@@ -5,6 +5,14 @@
 .claude/settings.local.json
 .claude/.session*
 
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
 # --- Node ---
 node_modules/
 npm-debug.log*
@@ -31,3 +39,6 @@ coverage/
 Thumbs.db
 .idea/
 *.log
+
+# --- Fontes brutas do RAG (manter só o texto curado em docs/sources/) ---
+*.pdf
