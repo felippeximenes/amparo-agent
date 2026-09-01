@@ -47,3 +47,7 @@ Thumbs.db
 qdrant_data/
 # --- Cache dos modelos de embedding (fastembed) ---
 .fastembed_cache/
+
+# --- saídas de debug locais ---
+ingest.txt
+eval.txt
