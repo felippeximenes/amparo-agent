@@ -27,7 +27,7 @@ trabalho.
 ## Fase 2 — Núcleo do agente (LangGraph)
 
 - [ ] Modelar o grafo: `intake_node → eligibility_node → rag_node → fallback_node → response_node`
-- [ ] Implementar `eligibility_node` como função determinística pura (idade, renda per capita, deficiência) com testes unitários cobrindo casos de borda
+- [~] Motor de elegibilidade — `src/amparo/rules/elegibilidade.py` (função pura `avaliar`), modelo de domínio em `CONTEXT.md` + `docs/adr/0001`. Cobre idade e renda per capita (exclusões + deduções do Anexo I da Portaria 34/2025, Bolsa Família na renda); deficiência sempre `depende_de_avaliacao`. Bateria de testes de borda em `tests/test_elegibilidade.py`. Falta: envolver num `eligibility_node` do LangGraph.
 - [ ] Integrar Amazon Bedrock com fallback (mesmo padrão do `certara-agent`)
 - [ ] Garantir citação obrigatória de fonte em toda resposta do `rag_node`
 - [ ] Persistência de sessão (Postgres/Neon) sem dado sensível fora da sessão ativa
