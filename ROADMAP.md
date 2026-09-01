@@ -26,12 +26,13 @@ trabalho.
 
 ## Fase 2 — Núcleo do agente (LangGraph)
 
-- [ ] Modelar o grafo: `intake_node → eligibility_node → rag_node → fallback_node → response_node`
-- [~] Motor de elegibilidade — `src/amparo/rules/elegibilidade.py` (função pura `avaliar`), modelo de domínio em `CONTEXT.md` + `docs/adr/0001`. Cobre idade e renda per capita (exclusões + deduções do Anexo I da Portaria 34/2025, Bolsa Família na renda); deficiência sempre `depende_de_avaliacao`. Bateria de testes de borda em `tests/test_elegibilidade.py`. Falta: envolver num `eligibility_node` do LangGraph.
-- [ ] Integrar Amazon Bedrock com fallback (mesmo padrão do `certara-agent`)
-- [ ] Garantir citação obrigatória de fonte em toda resposta do `rag_node`
-- [ ] Persistência de sessão (Postgres/Neon) sem dado sensível fora da sessão ativa
-- [ ] Testar o fluxo completo via CLI/notebook com casos reais (idoso sem deficiência, PCD jovem, renda na borda do limite)
+- [x] Modelar o grafo — `src/amparo/agente.py`: `intake → {elegibilidade | rag} → resposta` (StateGraph). Sem `fallback_node` até haver LLM.
+- [x] Motor de elegibilidade — `src/amparo/rules/elegibilidade.py` (função pura `avaliar`), modelo de domínio em `CONTEXT.md` + `docs/adr/0001`. Idade e renda per capita com exclusões + deduções do Anexo I da Portaria 34/2025, Bolsa Família na renda; deficiência sempre `depende_de_avaliacao`. Bordas em `tests/test_elegibilidade.py`. Embrulhado no `eligibility_node`.
+- [x] Citação obrigatória de fonte — `resposta` cita título + URL de cada trecho do RAG e a base legal da avaliação; disclaimer em toda resposta.
+- [ ] **Plugar um LLM** (provedor a decidir — interface em `src/amparo/llm.py`). Necessário para: extrair `Caso` da conversa (hoje elegibilidade sem `Caso` → `INDETERMINADO`), redigir resposta em linguagem simples (hoje é template), e o `fallback_node`. **NÃO exige Amazon Bedrock** — decidiremos entre API hospedada (Anthropic/OpenAI) ou local (Ollama).
+- [ ] Multi-turn: o agente pergunta os dados que faltam para a elegibilidade (LangGraph interrupt/loop).
+- [ ] Persistência de sessão (Postgres/Neon) sem dado sensível — LangGraph checkpointer.
+- [~] Testar o fluxo completo via CLI — `scripts/chat.py` roda (dúvida/checklist via RAG); casos de elegibilidade dependem do LLM.
 
 ## Fase 3 — Interface
 
