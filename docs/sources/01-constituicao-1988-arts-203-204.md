@@ -8,6 +8,10 @@ coletado_em: 2026-08-31
 
 > Recorte: apenas os arts. 203 e 204 (Seção da Assistência Social). Fundamento constitucional do BPC (art. 203, V).
 
+## Em resumo
+
+O fundamento constitucional do Benefício de Prestação Continuada (BPC) é o art. 203, inciso V, da Constituição Federal de 1988: garantia de 1 (um) salário mínimo mensal à pessoa com deficiência e à pessoa idosa que comprovem não possuir meios de prover a própria manutenção nem de tê-la provida pela família. O art. 204 fixa as diretrizes da assistência social.
+
 Art. 203. A assistência social será prestada a quem dela necessitar, independentemente de contribuição à seguridade social, e tem por objetivos:
 
 I - a proteção à família, à maternidade, à infância, à adolescência e à velhice;
