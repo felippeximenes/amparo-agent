@@ -18,12 +18,18 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastembed import SparseTextEmbedding, TextEmbedding
-from qdrant_client import models
+from qdrant_client import QdrantClient, models
 
 from amparo.config import settings
 
 DENSE = "dense"
 SPARSE = "bm25"
+
+
+@lru_cache(maxsize=1)
+def client() -> QdrantClient:
+    """QdrantClient em modo local, reutilizado no processo (um por vez)."""
+    return QdrantClient(path=settings.qdrant_path)
 
 
 @lru_cache(maxsize=1)
