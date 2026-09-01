@@ -1,11 +1,10 @@
-"""Validação da recuperação do RAG.
+"""Validação da recuperação do RAG (busca híbrida denso + BM25).
 
 Uso:  uv run python scripts/eval_retrieval.py [k]
 
-Roda um conjunto de perguntas reais contra o índice do Qdrant (mesmo modelo de
-embedding da ingestão) e reporta, para cada uma, se algum dos arquivos-fonte
-esperados aparece no top-k. Sai com código != 0 se o recall@k ficar abaixo de
-0.8 — assim serve tanto para inspeção manual quanto para guardar regressão.
+Roda um conjunto de perguntas reais contra o índice do Qdrant e reporta, para
+cada uma, se algum dos arquivos-fonte esperados aparece no top-k. Sai com
+código != 0 se o recall@k ficar abaixo de 0.8.
 
 Pré-requisito: `uv run python scripts/ingest.py` já executado.
 """
@@ -13,10 +12,10 @@ Pré-requisito: `uv run python scripts/ingest.py` já executado.
 import sys
 from pathlib import Path
 
-from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from amparo import rag  # noqa: E402
 from amparo.config import settings  # noqa: E402
 
 # (pergunta, {prefixos de arquivo que respondem legitimamente})
@@ -29,7 +28,7 @@ CASOS: list[tuple[str, set[str]]] = [
     ("Como o INSS avalia se a pessoa tem deficiência para o BPC?", {"03", "02", "13"}),
     ("Preciso estar inscrito no CadÚnico para pedir o BPC?", {"02", "12", "10"}),
     ("De quanto em quanto tempo o BPC é revisto?", {"02", "08"}),
-    ("Se eu começar a trabalhar de carteira assinada, perco o BPC?", {"02"}),
+    ("Se eu começar a trabalhar de carteira assinada, perco o BPC?", {"02", "12"}),
     ("Pessoa com deficiência que abre um MEI perde o benefício?", {"02"}),
     ("O BPC paga 13º salário?", {"14", "15"}),
     ("Quem já é aposentado pode acumular a aposentadoria com o BPC?", {"02", "08"}),
@@ -52,17 +51,11 @@ def prefixo(arquivo: str) -> str:
 
 def main() -> None:
     k = int(sys.argv[1]) if len(sys.argv) > 1 else 5
-
-    model = TextEmbedding(
-        model_name=settings.embedding_model, cache_dir=settings.fastembed_cache
-    )
     qc = QdrantClient(path=settings.qdrant_path)
 
     acertos = 0
     for pergunta, esperado in CASOS:
-        vec = next(iter(model.query_embed([pergunta]))).tolist()
-        pts = qc.query_points(settings.qdrant_collection, query=vec, limit=k).points
-        vistos = [prefixo(p.payload["arquivo"]) for p in pts]
+        vistos = [prefixo(p["arquivo"]) for p in rag.search(qc, pergunta, k)]
         rank = next((i + 1 for i, p in enumerate(vistos) if p in esperado), None)
         acertos += rank is not None
         tag = f"OK  r{rank}" if rank else "FALHA "

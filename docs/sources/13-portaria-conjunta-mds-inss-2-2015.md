@@ -2,6 +2,7 @@
 titulo: Portaria Conjunta MDS/INSS nº 2, de 30 de março de 2015 — avaliação social e médica da pessoa com deficiência para o BPC
 fonte: https://www.mds.gov.br/webarquivos/legislacao/assistencia_social/portarias/2015/portaria_conjunta_INSS_2_2015_BPC.pdf
 tipo: portaria
+tag: Portaria Conjunta MDS/INSS nº 2/2015
 coletado_em: 2026-08-31
 ---
 

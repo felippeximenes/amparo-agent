@@ -2,6 +2,7 @@
 titulo: Decreto nº 6.214, de 26 de setembro de 2007 — Regulamento do Benefício de Prestação Continuada
 fonte: https://www.planalto.gov.br/ccivil_03/_ato2007-2010/2007/decreto/d6214.htm
 tipo: decreto
+tag: Decreto 6.214/2007 (Regulamento do BPC)
 coletado_em: 2026-08-31
 ---
 

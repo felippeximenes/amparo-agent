@@ -2,6 +2,7 @@
 titulo: Carta de Serviços gov.br — Solicitar Benefício Assistencial ao Idoso (BPC/LOAS)
 fonte: https://www.gov.br/pt-br/servicos/solicitar-beneficio-assistencial-ao-idoso
 tipo: manual
+tag: Meu INSS — BPC ao idoso
 coletado_em: 2026-08-31
 ---
 

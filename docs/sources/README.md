@@ -8,9 +8,10 @@ Cabeçalho obrigatório em cada arquivo:
 
 ```
 ---
-titulo: <nome da norma ou manual>
+titulo: <nome completo da norma ou manual>
 fonte: <URL ou referência oficial>
 tipo: lei | decreto | instrucao_normativa | portaria | manual
+tag: <rótulo curto — 2 a 6 palavras — prefixado em cada trecho na ingestão>
 coletado_em: <YYYY-MM-DD>
 ---
 ```

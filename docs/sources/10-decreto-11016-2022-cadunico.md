@@ -2,6 +2,7 @@
 titulo: Decreto nº 11.016, de 29 de março de 2022 — Regulamento do Cadastro Único para Programas Sociais
 fonte: https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2022/decreto/d11016.htm
 tipo: decreto
+tag: Decreto 11.016/2022 (Cadastro Único)
 coletado_em: 2026-08-31
 ---
 

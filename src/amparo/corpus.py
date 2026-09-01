@@ -2,12 +2,11 @@
 
 Funções puras (sem I/O de rede): `parse_source` separa o cabeçalho YAML do
 corpo; `chunk` quebra o corpo em trechos pequenos (um dispositivo ou parte de
-um), cada um com a metadata da fonte no payload para a citação obrigatória
-(regra nº 2 do CLAUDE.md).
+um), cada um prefixado com o `tag` da fonte e com a metadata no payload para a
+citação obrigatória (regra nº 2 do CLAUDE.md).
 
 Os trechos são limitados a ~`_MAX_CHARS` caracteres porque os modelos de
-embedding multilíngues leves truncam em ~128 tokens — um trecho maior que isso
-seria só parcialmente vetorizado.
+embedding multilíngues leves truncam em ~128 tokens.
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-# Início de um novo dispositivo / divisão estrutural da norma.
 _BOUNDARY = re.compile(
     r"^(Art\. \d|Parágrafo único|## |CAPÍTULO|SEÇÃO|SECÃO|TÍTULO|LIVRO|ANEXO)"
 )
@@ -87,15 +85,19 @@ def chunk(meta: dict[str, str], body: str, arquivo: str) -> list[dict]:
             buf = f"{buf}\n\n{piece}".strip() if buf else piece
     flush()
 
-    return [
-        {
-            "arquivo": arquivo,
-            "titulo": meta.get("titulo", ""),
-            "fonte": meta.get("fonte", ""),
-            "tipo": meta.get("tipo", ""),
-            "coletado_em": meta.get("coletado_em", ""),
-            "trecho": t.splitlines()[0][:80],
-            "texto": t,
-        }
-        for t in texts
-    ]
+    tag = meta.get("tag", "")
+    out = []
+    for t in texts:
+        out.append(
+            {
+                "arquivo": arquivo,
+                "titulo": meta.get("titulo", ""),
+                "fonte": meta.get("fonte", ""),
+                "tipo": meta.get("tipo", ""),
+                "tag": tag,
+                "coletado_em": meta.get("coletado_em", ""),
+                "trecho": t.splitlines()[0][:80],
+                "texto": f"[{tag}] {t}" if tag else t,
+            }
+        )
+    return out

@@ -2,6 +2,7 @@
 titulo: Constituição da República Federativa do Brasil de 1988 — arts. 203 e 204
 fonte: https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm
 tipo: lei
+tag: Constituição Federal
 coletado_em: 2026-08-31
 ---
 

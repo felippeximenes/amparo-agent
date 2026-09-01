@@ -2,6 +2,7 @@
 titulo: Instrução Normativa PRES/INSS nº 128, de 28 de março de 2022 — dispositivos aplicáveis ao BPC
 fonte: https://www.gov.br/inss/pt-br/centrais-de-conteudo/legislacao/instrucao-normativa/2022/instrucao-normativa-pres-inss-no-128-de-28-de-marco-de-2022
 tipo: instrucao_normativa
+tag: IN INSS nº 128/2022
 coletado_em: 2026-08-31
 ---
 

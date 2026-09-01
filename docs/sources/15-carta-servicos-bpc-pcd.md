@@ -2,6 +2,7 @@
 titulo: Carta de Serviços gov.br — Solicitar Benefício Assistencial à Pessoa com Deficiência (BPC/LOAS)
 fonte: https://www.gov.br/pt-br/servicos/solicitar-beneficio-assistencial-a-pessoa-com-deficiencia
 tipo: manual
+tag: Meu INSS — BPC à pessoa com deficiência
 coletado_em: 2026-08-31
 ---
 

@@ -2,9 +2,9 @@
 
 Uso:  uv run python scripts/ingest.py
 
-Roda 100% local: embeddings via fastembed (baixa o modelo na 1ª execução, cache
-em `settings.fastembed_cache`) e Qdrant em modo arquivo (`settings.qdrant_path`).
-Recria a coleção do zero a cada execução — o corpus é curado à mão e pequeno.
+Roda 100% local: embeddings via fastembed (denso + BM25), Qdrant em modo
+arquivo (`settings.qdrant_path`). Recria a coleção do zero a cada execução — o
+corpus é curado à mão e pequeno.
 """
 
 import os
@@ -13,10 +13,10 @@ from pathlib import Path
 
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
-from fastembed import TextEmbedding
-from qdrant_client import QdrantClient, models
+from qdrant_client import QdrantClient, models  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from amparo import rag  # noqa: E402
 from amparo.config import settings  # noqa: E402
 from amparo.corpus import chunk, parse_source  # noqa: E402
 
@@ -36,32 +36,32 @@ def main() -> None:
         print(f"{f.name}: {len(c)} trechos")
     print(f"total: {len(chunks)} trechos")
 
-    print(f"carregando modelo {settings.embedding_model} ...")
-    model = TextEmbedding(
-        model_name=settings.embedding_model, cache_dir=settings.fastembed_cache
-    )
-
-    print("gerando embeddings ...")
-    vectors: list[list[float]] = []
-    for i, v in enumerate(model.passage_embed([c["texto"] for c in chunks]), start=1):
-        vectors.append(v.tolist())
-        if i % 50 == 0 or i == len(chunks):
-            print(f"  {i}/{len(chunks)}")
+    print("gerando embeddings (denso + BM25) ...")
+    dense_vecs, sparse_vecs = rag.encode_passages([c["texto"] for c in chunks])
 
     qc = QdrantClient(path=settings.qdrant_path)
     if qc.collection_exists(settings.qdrant_collection):
         qc.delete_collection(settings.qdrant_collection)
     qc.create_collection(
         settings.qdrant_collection,
-        vectors_config=models.VectorParams(
-            size=len(vectors[0]), distance=models.Distance.COSINE
-        ),
+        vectors_config={
+            rag.DENSE: models.VectorParams(
+                size=len(dense_vecs[0]), distance=models.Distance.COSINE
+            )
+        },
+        sparse_vectors_config={
+            rag.SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)
+        },
     )
     qc.upsert(
         settings.qdrant_collection,
         points=[
-            models.PointStruct(id=i, vector=v, payload=c)
-            for i, (v, c) in enumerate(zip(vectors, chunks))
+            models.PointStruct(
+                id=i,
+                vector={rag.DENSE: dv, rag.SPARSE: sv},
+                payload=c,
+            )
+            for i, (dv, sv, c) in enumerate(zip(dense_vecs, sparse_vecs, chunks))
         ],
     )
     total = qc.count(settings.qdrant_collection).count

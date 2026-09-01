@@ -2,6 +2,7 @@
 titulo: Lei nº 10.741, de 1º de outubro de 2003 (Estatuto da Pessoa Idosa) — arts. 33 e 34
 fonte: https://www.planalto.gov.br/ccivil_03/leis/2003/l10.741compilado.htm
 tipo: lei
+tag: Estatuto da Pessoa Idosa
 coletado_em: 2026-08-31
 ---
 

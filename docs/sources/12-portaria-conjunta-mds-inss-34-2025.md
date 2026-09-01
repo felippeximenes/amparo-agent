@@ -2,6 +2,7 @@
 titulo: Portaria Conjunta MDS/INSS nº 34, de 9 de outubro de 2025 — requerimento, concessão, manutenção e revisão do BPC
 fonte: https://www.gov.br/inss/pt-br/centrais-de-conteudo/legislacao/portarias-conjuntas/2025/ptcj34mds-inss.pdf
 tipo: portaria
+tag: Portaria Conjunta MDS/INSS nº 34/2025
 coletado_em: 2026-08-31
 ---
 
