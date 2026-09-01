@@ -26,5 +26,10 @@ class Settings(BaseSettings):
     llm_model: str = "qwen2.5:7b"
     llm_api_key: str = "ollama"
 
+    # US$ por 1 milhão de tokens (da página de pricing do provedor). Se > 0,
+    # o chat.py estima o custo da sessão.
+    llm_preco_entrada: float = 0.0
+    llm_preco_saida: float = 0.0
+
 
 settings = Settings()

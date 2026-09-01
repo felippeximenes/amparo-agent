@@ -28,10 +28,12 @@ fonte usada.
 ## Stack
 
 - **Python** + **LangGraph** — orquestração do agente
-- **Amazon Bedrock** — modelo de linguagem, com fallback
-- **Qdrant** — busca vetorial (RAG) sobre documentos oficiais curados
-- **Postgres (Neon)** — estado de sessão, sem dado sensível persistido
-- **AWS SAM** — deploy serverless
+- **Qdrant** — busca vetorial (RAG) sobre documentos oficiais curados; embeddings
+  locais (`fastembed`)
+- **LLM** via endpoint compatível com OpenAI — Ollama local por padrão, ou a API
+  da OpenAI trocando 3 variáveis
+- **Postgres (Neon)** — estado de sessão, sem dado sensível persistido (Fase 2)
+- Deploy serverless — a definir (Fase 4)
 
 ## Rodando localmente
 
@@ -43,10 +45,17 @@ uv sync                              # cria o .venv e instala as dependências
 uv run pytest                        # roda os testes
 uv run python scripts/ingest.py      # indexa docs/sources/ (baixa o modelo de embedding na 1ª vez)
 uv run python scripts/eval_retrieval.py   # valida a recuperação (recall@k) contra 20 perguntas
+uv run python scripts/chat.py             # REPL do agente
 ```
 
 O RAG usa embeddings locais (`fastembed`) e o Qdrant em modo arquivo
-(`./qdrant_data/`). O Amazon Bedrock só entra na Fase 2, para o LLM.
+(`./qdrant_data/`).
+
+O `chat.py` usa o LLM de `config.llm_*`. Padrão: **Ollama** local — instale de
+[ollama.com](https://ollama.com) e `ollama pull qwen2.5:7b`. Para usar a **API da
+OpenAI**, copie `.env.example` para `.env` e preencha `LLM_BASE_URL`,
+`LLM_API_KEY` e `LLM_MODEL` (e opcionalmente os preços, para ver o custo estimado
+da sessão). Sem LLM no ar, o agente roda em modo template.
 
 Skills do Claude Code: a pasta `.claude/skills/` é gitignored — rode o script em
 `.claude/SKILLS_NOTES.md` depois de clonar.

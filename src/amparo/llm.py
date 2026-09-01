@@ -128,11 +128,17 @@ class ChatLLM:
         model: str,
         api_key: str = "ollama",
         timeout: float = 120.0,
+        preco_entrada: float = 0.0,
+        preco_saida: float = 0.0,
     ) -> None:
         from openai import OpenAI
 
         self._client = OpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
         self._model = model
+        self._preco_entrada = preco_entrada
+        self._preco_saida = preco_saida
+        self.tokens_entrada = 0
+        self.tokens_saida = 0
 
     def _chat(self, system: str, user: str, *, json_mode: bool = False) -> str:
         kwargs = dict(
@@ -147,9 +153,27 @@ class ChatLLM:
             kwargs["response_format"] = {"type": "json_object"}
         try:
             r = self._client.chat.completions.create(**kwargs)
-            return (r.choices[0].message.content or "").strip()
         except Exception:
             return ""
+        uso = getattr(r, "usage", None)
+        if uso is not None:
+            self.tokens_entrada += getattr(uso, "prompt_tokens", 0) or 0
+            self.tokens_saida += getattr(uso, "completion_tokens", 0) or 0
+        return (r.choices[0].message.content or "").strip()
+
+    def resumo_uso(self) -> str:
+        total = self.tokens_entrada + self.tokens_saida
+        linha = (
+            f"tokens: {self.tokens_entrada} entrada + {self.tokens_saida} saída "
+            f"= {total}"
+        )
+        if self._preco_entrada or self._preco_saida:
+            custo = (
+                self.tokens_entrada / 1_000_000 * self._preco_entrada
+                + self.tokens_saida / 1_000_000 * self._preco_saida
+            )
+            linha += f"  |  custo estimado da sessão: US$ {custo:.4f}"
+        return linha
 
     def extrair_caso(self, texto: str) -> Caso | None:
         saida = self._chat(_SYS_EXTRAIR, texto, json_mode=True)
@@ -181,13 +205,16 @@ def criar_llm(check: bool = True) -> LLM | None:
     rápido e devolve `None` (com aviso) quando o endpoint não responde."""
     from amparo.config import settings
 
-    llm = ChatLLM(settings.llm_base_url, settings.llm_model, settings.llm_api_key)
+    llm = ChatLLM(
+        settings.llm_base_url,
+        settings.llm_model,
+        settings.llm_api_key,
+        preco_entrada=settings.llm_preco_entrada,
+        preco_saida=settings.llm_preco_saida,
+    )
     if check:
         try:
-            probe = ChatLLM(
-                settings.llm_base_url, settings.llm_model, settings.llm_api_key, timeout=5
-            )
-            probe._client.models.list()
+            llm._client.models.list()
         except Exception:
             print(
                 f"[amparo] LLM indisponível em {settings.llm_base_url} "

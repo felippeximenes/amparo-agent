@@ -21,18 +21,23 @@ BANNER = (
 
 
 def main() -> None:
-    grafo = construir_grafo(criar_llm())
+    llm = criar_llm()
+    grafo = construir_grafo(llm)
     print(BANNER)
-    while True:
-        try:
-            pergunta = input("> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-        if pergunta.lower() in {"sair", "exit", "quit", ""}:
-            return
-        estado = grafo.invoke({"pergunta": pergunta})
-        print("\n" + estado["resposta"] + "\n")
+    try:
+        while True:
+            try:
+                pergunta = input("> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            if pergunta.lower() in {"sair", "exit", "quit", ""}:
+                break
+            estado = grafo.invoke({"pergunta": pergunta})
+            print("\n" + estado["resposta"] + "\n")
+    finally:
+        if hasattr(llm, "resumo_uso") and getattr(llm, "tokens_entrada", 0):
+            print("[amparo] " + llm.resumo_uso())
 
 
 if __name__ == "__main__":
