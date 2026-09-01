@@ -3,11 +3,13 @@
 Uso:  uv run python scripts/ingest.py
 
 Roda 100% local: embeddings via fastembed (denso + BM25), Qdrant em modo
-arquivo (`settings.qdrant_path`). Recria a coleção do zero a cada execução — o
+arquivo (`settings.qdrant_path`). Apaga e recria o índice a cada execução — o
 corpus é curado à mão e pequeno.
 """
 
+import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -38,10 +40,12 @@ def main() -> None:
 
     print("gerando embeddings (denso + BM25) ...")
     dense_vecs, sparse_vecs = rag.encode_passages([c["texto"] for c in chunks])
+    Path(settings.bm25_idf_path).write_text(
+        json.dumps(rag.compute_idf(sparse_vecs)), encoding="utf-8"
+    )
 
+    shutil.rmtree(settings.qdrant_path, ignore_errors=True)  # índice do zero
     qc = QdrantClient(path=settings.qdrant_path)
-    if qc.collection_exists(settings.qdrant_collection):
-        qc.delete_collection(settings.qdrant_collection)
     qc.create_collection(
         settings.qdrant_collection,
         vectors_config={
@@ -49,18 +53,12 @@ def main() -> None:
                 size=len(dense_vecs[0]), distance=models.Distance.COSINE
             )
         },
-        sparse_vectors_config={
-            rag.SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)
-        },
+        sparse_vectors_config={rag.SPARSE: models.SparseVectorParams()},
     )
     qc.upsert(
         settings.qdrant_collection,
         points=[
-            models.PointStruct(
-                id=i,
-                vector={rag.DENSE: dv, rag.SPARSE: sv},
-                payload=c,
-            )
+            models.PointStruct(id=i, vector={rag.DENSE: dv, rag.SPARSE: sv}, payload=c)
             for i, (dv, sv, c) in enumerate(zip(dense_vecs, sparse_vecs, chunks))
         ],
     )

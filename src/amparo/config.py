@@ -15,5 +15,9 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     fastembed_cache: str = "./.fastembed_cache"
 
+    # IDF do BM25, calculado na ingestão e aplicado à consulta (o modo local do
+    # Qdrant não honra o Modifier.IDF).
+    bm25_idf_path: str = "./bm25_idf.json"
+
 
 settings = Settings()
