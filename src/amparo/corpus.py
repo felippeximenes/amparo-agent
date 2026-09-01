@@ -17,8 +17,35 @@ from pathlib import Path
 _BOUNDARY = re.compile(
     r"^(Art\. \d|Parágrafo único|## |CAPÍTULO|SEÇÃO|SECÃO|TÍTULO|LIVRO|ANEXO)"
 )
+_UNIT = re.compile(r"^(Art\. \d|## |CAPÍTULO|SEÇÃO|SECÃO|TÍTULO|LIVRO|ANEXO)")
+_ART_NUM = re.compile(r"^Art\. (\d+(?:-[A-Z])?)\b")
 _MAX_CHARS = 500  # ~128 tokens do modelo de embedding
 _MIN_CHARS = 80   # abaixo disto, funde no trecho seguinte
+
+
+def _dedupe_redacoes(body: str) -> str:
+    """Nos textos compilados do Planalto, cada artigo alterado aparece com todas
+    as redações históricas empilhadas. Mantém só a última (vigente) de cada
+    número de artigo."""
+    units: list[list[str]] = []
+    for block in body.split("\n\n"):
+        if not units or _UNIT.match(block.strip()):
+            units.append([block])
+        else:
+            units[-1].append(block)
+
+    last: dict[str, int] = {}
+    for i, u in enumerate(units):
+        m = _ART_NUM.match(u[0].strip())
+        if m:
+            last[m.group(1)] = i
+
+    kept = [
+        "\n\n".join(u)
+        for i, u in enumerate(units)
+        if not (_ART_NUM.match(u[0].strip()) and last[_ART_NUM.match(u[0].strip()).group(1)] != i)
+    ]
+    return "\n\n".join(kept)
 
 
 def parse_source(path: str | Path) -> tuple[dict[str, str], str]:
@@ -55,7 +82,7 @@ def chunk(meta: dict[str, str], body: str, arquivo: str) -> list[dict]:
     """Quebra o corpo em trechos curtos, cada um com a metadata da fonte."""
     blocks = [
         b.strip()
-        for b in body.split("\n\n")
+        for b in _dedupe_redacoes(body).split("\n\n")
         if b.strip() and not b.lstrip().startswith(">")  # ignora nota de curadoria
     ]
 

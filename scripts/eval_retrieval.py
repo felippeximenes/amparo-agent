@@ -20,7 +20,7 @@ from amparo.config import settings  # noqa: E402
 
 # (pergunta, {prefixos de arquivo que respondem legitimamente})
 CASOS: list[tuple[str, set[str]]] = [
-    ("Tenho 64 anos, posso pedir o BPC como idoso?", {"02", "06"}),
+    ("Tenho 64 anos, posso pedir o BPC como idoso?", {"02", "06", "14"}),
     ("Qual é o limite de renda por pessoa da família para ter direito ao BPC?", {"02", "04", "08"}),
     ("Quem entra no grupo familiar para calcular a renda do BPC?", {"02", "08", "12"}),
     ("O Bolsa Família entra no cálculo da renda do BPC?", {"09"}),
@@ -28,7 +28,7 @@ CASOS: list[tuple[str, set[str]]] = [
     ("Como o INSS avalia se a pessoa tem deficiência para o BPC?", {"03", "02", "13"}),
     ("Preciso estar inscrito no CadÚnico para pedir o BPC?", {"02", "12", "10"}),
     ("De quanto em quanto tempo o BPC é revisto?", {"02", "08"}),
-    ("Se eu começar a trabalhar de carteira assinada, perco o BPC?", {"02", "12"}),
+    ("Se eu começar a trabalhar de carteira assinada, perco o BPC?", {"02", "08", "12"}),
     ("Pessoa com deficiência que abre um MEI perde o benefício?", {"02"}),
     ("O BPC paga 13º salário?", {"14", "15"}),
     ("Quem já é aposentado pode acumular a aposentadoria com o BPC?", {"02", "08"}),

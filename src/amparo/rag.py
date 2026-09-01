@@ -69,5 +69,18 @@ def search(client, query: str, k: int = 5, rrf_k: int = 60) -> list[dict]:
             scores[h.id] = scores.get(h.id, 0.0) + 1.0 / (rrf_k + rank)
             payloads[h.id] = h.payload
 
-    top = sorted(scores, key=scores.get, reverse=True)[:k]
-    return [payloads[i] for i in top]
+    ordered = sorted(scores, key=scores.get, reverse=True)
+
+    # diversifica: no máximo `per_file` trechos do mesmo arquivo no top-k
+    per_file = 2
+    seen: dict[str, int] = {}
+    out: list[dict] = []
+    for i in ordered:
+        arq = payloads[i].get("arquivo", "")
+        if seen.get(arq, 0) >= per_file:
+            continue
+        seen[arq] = seen.get(arq, 0) + 1
+        out.append(payloads[i])
+        if len(out) == k:
+            break
+    return out
