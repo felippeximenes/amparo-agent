@@ -1,11 +1,16 @@
 """Grafo do agente Amparo (LangGraph).
 
-Versão sem LLM: `intake` classifica a intenção por palavra-chave, `elegibilidade`
-embrulha o motor de regras, `rag` embrulha a busca híbrida, `resposta` compõe o
-texto final por template — sempre com citação de fonte e o disclaimer.
+`construir_grafo(llm)` monta `intake → {elegibilidade | rag} → resposta`.
 
-O parsing de texto livre para um `Caso` e o polimento da resposta entram depois,
-quando um provedor de LLM for plugado.
+- `intake` classifica a intenção por palavra-chave.
+- `elegibilidade` usa `llm.extrair_caso` para montar um `Caso` a partir da fala;
+  sem `Caso` (ou sem LLM) devolve `INDETERMINADO` pedindo os dados.
+- `rag` faz a busca híbrida.
+- `resposta` compõe o texto: com LLM, `llm.responder` redige sobre os trechos;
+  sem LLM, template. A parte de elegibilidade é sempre template (mantém os
+  números e o veredito exatos). Disclaimer em toda resposta.
+
+`fallback_node` (saída estruturada do modelo) entra quando fizer falta.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ from langgraph.graph import END, START, StateGraph
 
 from amparo import rag
 from amparo.disclaimer import DISCLAIMER
+from amparo.llm import LLM
 from amparo.rules.elegibilidade import Avaliacao, Caso, Resultado, avaliar
 
 
@@ -29,9 +35,9 @@ class Intencao(str, Enum):
 class Estado(TypedDict, total=False):
     pergunta: str
     intencao: Intencao
-    caso: Caso | None          # montado fora do grafo por enquanto
+    caso: Caso | None          # se já vier montado, o LLM não é chamado
     avaliacao: Avaliacao | None
-    trechos: list[dict]        # payloads do rag.search (com titulo/fonte/tag)
+    trechos: list[dict]
     resposta: str
 
 
@@ -47,88 +53,109 @@ _CHECKLIST = (
 )
 
 
-def intake(estado: Estado) -> dict:
-    p = estado.get("pergunta", "").lower()
+def classificar_intencao(pergunta: str) -> Intencao:
+    p = pergunta.lower()
     if any(k in p for k in _ELEGIBILIDADE):
-        intencao = Intencao.ELEGIBILIDADE
-    elif any(k in p for k in _CHECKLIST):
-        intencao = Intencao.CHECKLIST
-    else:
-        intencao = Intencao.DUVIDA
-    return {"intencao": intencao}
+        return Intencao.ELEGIBILIDADE
+    if any(k in p for k in _CHECKLIST):
+        return Intencao.CHECKLIST
+    return Intencao.DUVIDA
 
 
-def elegibilidade(estado: Estado) -> dict:
-    caso = estado.get("caso")
-    if caso is None:
-        return {
-            "avaliacao": Avaliacao(
-                Resultado.INDETERMINADO,
-                "Para verificar, preciso saber: se a análise é por idade ou por "
-                "deficiência, a idade do requerente, quem mora na mesma casa "
-                "(cônjuge, pais, filhos e irmãos solteiros) e a renda mensal de "
-                "cada um.",
-                fontes=("LOAS art. 20",),
-            )
-        }
-    return {"avaliacao": avaliar(caso)}
-
-
-def rag_node(estado: Estado) -> dict:
-    pergunta = estado.get("pergunta", "")
-    trechos = rag.search(rag.client(), pergunta, k=4) if pergunta else []
-    return {"trechos": trechos}
+PEDIDO_DE_DADOS = Avaliacao(
+    Resultado.INDETERMINADO,
+    "Para verificar, preciso saber: se a análise é por idade ou por deficiência, "
+    "a idade do requerente, quem mora na mesma casa (cônjuge, pais, filhos e "
+    "irmãos solteiros) e a renda mensal de cada um.",
+    fontes=("LOAS (Lei 8.742/1993) art. 20",),
+)
 
 
 def _linha_veredito(a: Avaliacao) -> str:
     if a.resultado is Resultado.ATENDE:
-        return "Pelos dados informados, você parece atender aos critérios de idade e renda do BPC."
-    if a.resultado is Resultado.DEPENDE_DE_AVALIACAO:
-        return a.motivo
-    if a.resultado is Resultado.INDETERMINADO:
+        return (
+            "Pelos dados informados, você parece atender aos critérios de idade e "
+            "renda do BPC."
+        )
+    if a.resultado in (Resultado.DEPENDE_DE_AVALIACAO, Resultado.INDETERMINADO):
         return a.motivo
     return f"Pelos dados informados, ainda não é atendido um dos critérios. {a.motivo}"
 
 
-def resposta(estado: Estado) -> dict:
+def compor_resposta(
+    *,
+    avaliacao: Avaliacao | None = None,
+    trechos: list[dict] | tuple = (),
+    texto_rag: str | None = None,
+) -> str:
     partes: list[str] = []
-    a = estado.get("avaliacao")
-    if a is not None:
-        partes.append(_linha_veredito(a))
-        if a.renda_per_capita is not None and a.limite_renda is not None:
-            partes.append(
-                f"Renda por pessoa considerada: R$ {a.renda_per_capita:.2f}. "
-                f"Limite (1/4 do salário mínimo): R$ {a.limite_renda:.2f}."
-            )
-        if a.fontes:
-            partes.append("Base: " + "; ".join(a.fontes) + ".")
 
-    trechos = estado.get("trechos") or []
-    if trechos:
+    if avaliacao is not None:  # trilha de elegibilidade — sempre template exato
+        partes.append(_linha_veredito(avaliacao))
+        if avaliacao.renda_per_capita is not None and avaliacao.limite_renda is not None:
+            partes.append(
+                f"Renda por pessoa considerada: R$ {avaliacao.renda_per_capita:.2f}. "
+                f"Limite (1/4 do salário mínimo): R$ {avaliacao.limite_renda:.2f}."
+            )
+        if avaliacao.fontes:
+            partes.append("Base: " + "; ".join(avaliacao.fontes) + ".")
+    elif texto_rag:  # trilha do RAG com LLM
+        partes.append(texto_rag)
+    elif trechos:  # trilha do RAG sem LLM
         partes.append("Segundo as fontes oficiais consultadas:")
-        for t in trechos[:3]:
+        for t in list(trechos)[:3]:
             corpo = t["texto"][:320].rstrip()
             partes.append(f"— {corpo}…\n  Fonte: {t['titulo']} — {t['fonte']}")
-    elif a is None:
+    else:
         partes.append(
             "Não encontrei essa informação nas fontes oficiais que consulto. "
-            "Procure o INSS (telefone 135 ou Meu INSS) ou a Defensoria Pública."
+            "Procure o INSS (telefone 135 ou pelo Meu INSS) ou a Defensoria Pública."
         )
 
     partes.append(DISCLAIMER)
-    return {"resposta": "\n\n".join(partes)}
+    return "\n\n".join(partes)
 
 
-def _rota(estado: Estado) -> str:
-    return "elegibilidade" if estado.get("intencao") is Intencao.ELEGIBILIDADE else "rag"
+def construir_grafo(llm: LLM | None = None):
+    def no_intake(estado: Estado) -> dict:
+        return {"intencao": classificar_intencao(estado.get("pergunta", ""))}
 
+    def no_elegibilidade(estado: Estado) -> dict:
+        caso = estado.get("caso")
+        if caso is None and llm is not None:
+            caso = llm.extrair_caso(estado.get("pergunta", ""))
+        return {"avaliacao": avaliar(caso) if caso is not None else PEDIDO_DE_DADOS}
 
-def construir_grafo():
+    def no_rag(estado: Estado) -> dict:
+        pergunta = estado.get("pergunta", "")
+        trechos = rag.search(rag.client(), pergunta, k=4) if pergunta else []
+        return {"trechos": trechos}
+
+    def no_resposta(estado: Estado) -> dict:
+        trechos = estado.get("trechos") or []
+        texto_rag = None
+        if llm is not None and trechos:
+            texto_rag = llm.responder(estado.get("pergunta", ""), trechos) or None
+        return {
+            "resposta": compor_resposta(
+                avaliacao=estado.get("avaliacao"),
+                trechos=trechos,
+                texto_rag=texto_rag,
+            )
+        }
+
+    def _rota(estado: Estado) -> str:
+        return (
+            "elegibilidade"
+            if estado.get("intencao") is Intencao.ELEGIBILIDADE
+            else "rag"
+        )
+
     g = StateGraph(Estado)
-    g.add_node("intake", intake)
-    g.add_node("elegibilidade", elegibilidade)
-    g.add_node("rag", rag_node)
-    g.add_node("resposta", resposta)
+    g.add_node("intake", no_intake)
+    g.add_node("elegibilidade", no_elegibilidade)
+    g.add_node("rag", no_rag)
+    g.add_node("resposta", no_resposta)
     g.add_edge(START, "intake")
     g.add_conditional_edges(
         "intake", _rota, {"elegibilidade": "elegibilidade", "rag": "rag"}

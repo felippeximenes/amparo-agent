@@ -19,5 +19,12 @@ class Settings(BaseSettings):
     # Qdrant não honra o Modifier.IDF).
     bm25_idf_path: str = "./bm25_idf.json"
 
+    # LLM via endpoint compatível com OpenAI. Padrão: Ollama local.
+    # Para a API da OpenAI: llm_base_url=https://api.openai.com/v1,
+    # llm_api_key=sk-..., llm_model=gpt-4o-mini (ou outro).
+    llm_base_url: str = "http://localhost:11434/v1"
+    llm_model: str = "qwen2.5:7b"
+    llm_api_key: str = "ollama"
+
 
 settings = Settings()

@@ -2,9 +2,9 @@
 
 Uso:  uv run python scripts/chat.py
 
-Sem LLM ainda: perguntas de elegibilidade caem em INDETERMINADO (o motor de
-regras roda quando um `Caso` é montado programaticamente); dúvidas e checklist
-usam o RAG. Requer o índice: `uv run python scripts/ingest.py`.
+Usa o LLM de `config.llm_*` (padrão: Ollama local). Sem LLM no ar, roda em modo
+template: elegibilidade sem dados montados fica INDETERMINADO. Requer o índice do
+RAG: `uv run python scripts/ingest.py`.
 """
 
 import sys
@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from amparo.agente import construir_grafo  # noqa: E402
+from amparo.llm import criar_llm  # noqa: E402
 
 BANNER = (
     "Amparo (protótipo) — orientação informativa sobre o BPC/LOAS.\n"
@@ -20,7 +21,7 @@ BANNER = (
 
 
 def main() -> None:
-    grafo = construir_grafo()
+    grafo = construir_grafo(criar_llm())
     print(BANNER)
     while True:
         try:
