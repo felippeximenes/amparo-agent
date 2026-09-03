@@ -2,7 +2,7 @@
 
 Agente de IA que ajuda pessoas de baixa renda, idosas ou com deficiência a
 entender e solicitar o **BPC/LOAS** (Benefício de Prestação Continuada) junto
-ao INSS.
+ao INSS!
 
 > ⚠️ **Projeto em desenvolvimento.** Amparo é uma ferramenta de orientação
 > informativa e independente — **não é um canal oficial do INSS ou do
