@@ -1,54 +1,189 @@
 # Roadmap — Amparo
 
-Checklist de execução do MVP (BPC/LOAS). Marque os itens conforme forem
-concluídos; mantenha esta lista como fonte de verdade do progresso do
-projeto — é ela que orienta qualquer sessão do Claude Code que continuar o
-trabalho.
+Fonte de verdade do progresso do projeto. Marque os itens conforme forem
+concluídos — é esta lista que orienta qualquer sessão (humana ou do Claude
+Code) que continuar o trabalho.
 
-## Fase 0 — Fundação
+Legenda: `[x]` feito · `[~]` parcial · `[ ]` a fazer
 
-- [x] Confirmar stack final — Python 3.12 + LangGraph + Qdrant + Bedrock (Titan Embeddings v2 + Claude). Postgres/Neon adiado para a Fase 2 (persistência de sessão); nada de banco nesta fase.
-- [x] Criar estrutura de pastas (`src/amparo/`, `tests/`; `docs/sources/` já existe)
-- [x] Escrever o texto padrão do disclaimer legal — `src/amparo/disclaimer.py` (+ teste)
-- [x] Configurar ambiente local — `pyproject.toml`, `.python-version`, `.env.example`, `docker-compose.yml` (Qdrant), seção "Rodando localmente" no `README.md`
+---
 
-## Fase 1 — Curadoria de conteúdo (RAG)
+## Onde estamos (revisão de 15/10/2026)
 
-- [x] Selecionar 15–20 fontes oficiais sobre BPC/LOAS — 15 selecionadas e validadas; levantamento em `docs/research/bpc-loas-fontes-oficiais.md`:
-  - Lei Orgânica da Assistência Social (Lei 8.742/93) e alterações (Leis 13.146/2015, 13.982/2020, 14.176/2021, 15.077/2024; Estatuto da Pessoa Idosa; CF/1988 arts. 203-204)
-  - Decreto 6.214/2007 (regulamenta o BPC), Decreto 12.534/2025 e Decreto 11.016/2022 (CadÚnico)
-  - IN PRES/INSS nº 128/2022 (recorte) e Portarias Conjuntas MDS/INSS nº 34/2025 e nº 2/2015
-  - Cartas de Serviço gov.br (BPC ao idoso e BPC à PcD)
-  - Pendente: Portaria Conjunta MDS/MPS/INSS nº 33/2025 (sem URL oficial do texto integral)
-- [x] Estruturar os documentos em `docs/sources/` (texto limpo, com metadata de fonte e data de coleta) — 15 arquivos criados (`01-*.md` a `15-*.md`); índice no `docs/sources/README.md`
-- [x] Escrever script de ingestão (chunking + embeddings) para o Qdrant — `scripts/ingest.py` + `src/amparo/corpus.py` (parse/chunk puros, com teste); chunk por dispositivo (Art./§/heading), payload com titulo/fonte/tipo para citação automática. Roda 100% local: `fastembed` (embeddings) + Qdrant em modo arquivo. **Falta rodar** `uv run python scripts/ingest.py`.
-- [x] Validar a recuperação (RAG) com um conjunto de perguntas de teste — `scripts/eval_retrieval.py` (20 perguntas, recall@k, falha se < 0.8). **recall@5 = 85%** (17/20). Busca híbrida denso (MiniLM) + BM25 com IDF, fusão RRF, máx. 2 trechos/arquivo; redações revogadas removidas dos textos compilados; `tag` de fonte prefixada nos trechos. Fraquezas conhecidas (compensadas pelo LLM na Fase 2): perguntas muito coloquiais sobre periodicidade, fatos que só aparecem nas cartas de serviço, termos que o Decreto 6.214 repete em muitos trechos.
+Último commit: 02/09/2026 (`fc581e1`). **41 testes passando.**
 
-## Fase 2 — Núcleo do agente (LangGraph)
+| Fase | Situação |
+|---|---|
+| 0 — Fundação | ✅ concluída |
+| 1 — Curadoria + RAG | ✅ concluída (recall@5 = 85%) — 1 fonte pendente |
+| 2 — Núcleo do agente | 🟡 ~60% — LLM plugado, falta conversa multi-turno e memória |
+| 3 — API HTTP | ⬜ não iniciada |
+| 4 — Canal WhatsApp | ⬜ não iniciada |
+| 5 — Demo web | ⬜ não iniciada |
+| 6 — Qualidade, LGPD e deploy | ⬜ não iniciada |
+| 7 — Portfólio | ⬜ não iniciada |
 
-- [x] Modelar o grafo — `src/amparo/agente.py`: `intake → {elegibilidade | rag} → resposta` (StateGraph). Sem `fallback_node` até haver LLM.
-- [x] Motor de elegibilidade — `src/amparo/rules/elegibilidade.py` (função pura `avaliar`), modelo de domínio em `CONTEXT.md` + `docs/adr/0001`. Idade e renda per capita com exclusões + deduções do Anexo I da Portaria 34/2025, Bolsa Família na renda; deficiência sempre `depende_de_avaliacao`. Bordas em `tests/test_elegibilidade.py`. Embrulhado no `eligibility_node`.
-- [x] Citação obrigatória de fonte — `resposta` cita título + URL de cada trecho do RAG e a base legal da avaliação; disclaimer em toda resposta.
-- [ ] **Plugar um LLM** (provedor a decidir — interface em `src/amparo/llm.py`). Necessário para: extrair `Caso` da conversa (hoje elegibilidade sem `Caso` → `INDETERMINADO`), redigir resposta em linguagem simples (hoje é template), e o `fallback_node`. **NÃO exige Amazon Bedrock** — decidiremos entre API hospedada (Anthropic/OpenAI) ou local (Ollama).
-- [ ] Multi-turn: o agente pergunta os dados que faltam para a elegibilidade (LangGraph interrupt/loop).
-- [ ] Persistência de sessão (Postgres/Neon) sem dado sensível — LangGraph checkpointer.
-- [~] Testar o fluxo completo via CLI — `scripts/chat.py` roda (dúvida/checklist via RAG); casos de elegibilidade dependem do LLM.
+**O que já funciona hoje:** pergunta única pelo CLI (`scripts/chat.py`) →
+intenção por palavra-chave → RAG híbrido (denso + BM25 + RRF) **ou** motor de
+elegibilidade determinístico → resposta com fonte + disclaimer. O LLM (Ollama
+ou OpenAI, via endpoint compatível) já extrai o `Caso` da fala e redige a
+resposta do RAG.
 
-## Fase 3 — Interface
+**Principais lacunas encontradas na revisão:**
 
-- [ ] Front-end web mínimo (chat), reaproveitando padrões de UI do `certara-agent`
-- [ ] Acessibilidade: navegação por teclado, ARIA, contraste, `prefers-reduced-motion` (mesmo padrão do projeto `Caminhos`)
-- [ ] Exibir o disclaimer de forma visível e permanente na interface
+1. **Cada mensagem é independente.** O grafo não guarda histórico: para checar
+   elegibilidade, a pessoa precisa contar idade, quem mora na casa e a renda de
+   todos *numa única mensagem*. É o bloqueio nº 1 para o WhatsApp.
+2. **Salário mínimo desatualizado.** `PARAMETROS_2025` usa R$ 1.518 (limite
+   R$ 379,50). Em 2026 o SM é **R$ 1.621** → limite de 1/4 = **R$ 405,25**.
+   Alguém com renda per capita entre esses dois valores recebe hoje um
+   "não atende" errado. Conferir também se o Anexo I da Portaria 34/2025
+   (deduções de saúde) teve valores revistos.
+3. **Documentação divergente do código.** `CLAUDE.md` e a Fase 0 falam em
+   Amazon Bedrock/Titan; o código usa `fastembed` + endpoint OpenAI-compatível
+   (Ollama/OpenAI). O item "Plugar um LLM" estava desmarcado, mas foi feito em
+   01/09.
+4. **Qdrant em modo arquivo** só aceita um processo — serve para o CLI, não
+   para um servidor web/webhook com vários workers.
+5. Intenção classificada só por palavra-chave (frágil para fala coloquial) e
+   sem `fallback_node`.
 
-## Fase 4 — Qualidade, conformidade e deploy
+---
 
-- [ ] Cobertura E2E com Playwright dos fluxos principais
-- [ ] Revisão de conformidade LGPD: nenhuma persistência de dado sensível fora da sessão ativa, política de retenção documentada
-- [ ] Deploy serverless (AWS SAM, mesmo padrão do `certara-agent`)
-- [ ] Documentar a arquitetura final no `README.md` com prints/vídeo de demonstração (para o portfólio)
+## Fase 0 — Fundação ✅
 
-## Fase 5 — Extensão (pós-MVP)
+- [x] Stack: Python 3.12 + LangGraph + Qdrant + `fastembed` (embeddings locais) + LLM via endpoint compatível com OpenAI (Ollama por padrão). *(Bedrock foi a escolha inicial e foi abandonada em 31/08 — RAG 100% local.)*
+- [x] Estrutura de pastas (`src/amparo/`, `tests/`, `docs/sources/`)
+- [x] Disclaimer legal — `src/amparo/disclaimer.py` (+ teste)
+- [x] Ambiente local — `pyproject.toml`, `uv.lock`, `.env.example`, `docker-compose.yml` (Qdrant opcional)
 
-- [ ] Canal WhatsApp via n8n como alternativa de acesso para quem não usa apps
-- [ ] Iniciar o projeto irmão (agente de acessibilidade documental) como módulo do Amparo
-- [ ] Expandir cobertura para outros benefícios (auxílio-doença, aposentadoria por invalidez)
+## Fase 1 — Curadoria de conteúdo (RAG) ✅
+
+- [x] 15 fontes oficiais selecionadas e validadas (`docs/research/bpc-loas-fontes-oficiais.md`)
+- [x] Documentos estruturados em `docs/sources/` com metadata (título, fonte, tipo, tag, data de coleta)
+- [x] Ingestão: chunk por dispositivo legal (Art./§/heading), payload pronto para citação — `scripts/ingest.py` + `src/amparo/corpus.py`
+- [x] Avaliação da recuperação — `scripts/eval_retrieval.py`, 20 perguntas, **recall@5 = 85%** (busca híbrida densa + BM25 com IDF, fusão RRF, máx. 2 trechos/arquivo)
+- [ ] Coletar a Portaria Conjunta MDS/MPS/INSS nº 33/2025 (reavaliação, art. 21 da LOAS) — texto integral do DOU de 07/08/2025
+- [ ] Ampliar o conjunto de avaliação para ~40 perguntas, incluindo perguntas **coloquiais** (como as pessoas escrevem no WhatsApp: "minha mãe tem 66 anos e ganha pensão, ela pode pegar o loas?")
+
+## Fase 2 — Núcleo do agente (LangGraph) 🟡
+
+Já feito:
+
+- [x] Grafo `intake → {elegibilidade | rag} → resposta` — `src/amparo/agente.py`
+- [x] Motor de elegibilidade determinístico — `src/amparo/rules/elegibilidade.py` (idade, renda per capita, exclusões e deduções do Anexo I da Portaria 34/2025; deficiência sempre `depende_de_avaliacao`), com testes de borda
+- [x] Citação obrigatória de fonte + disclaimer em toda resposta
+- [x] LLM plugado — `src/amparo/llm.py` (`ChatLLM`, Ollama ou OpenAI): extrai o `Caso` da fala (JSON) e redige a resposta do RAG; modo template quando não há LLM; contador de tokens/custo
+- [~] Fluxo completo via CLI — funciona para pergunta única
+
+A fazer (nesta ordem):
+
+- [ ] **Atualizar parâmetros para 2026** — `PARAMETROS_2026` (SM R$ 1.621, vigência 01/01/2026) e seleção do parâmetro pela data; testes de borda em R$ 405,25. Revisar valores do Anexo I.
+- [ ] **Conversa multi-turno** — o `Caso` passa a ser montado aos poucos: o estado guarda o histórico e os dados já coletados; o agente pergunta *um dado por vez* o que falta (rota → idade → quem mora na casa → renda de cada um → gastos de saúde) e só chama `avaliar()` quando o `Caso` está completo. Ideal para botões do WhatsApp na Fase 4.
+- [ ] **Memória de sessão** — checkpointer do LangGraph com `thread_id` por conversa. Dev: `MemorySaver`/SQLite; produção: Postgres (Neon). Expiração automática (ex.: 24 h sem mensagem → apaga o estado) — atende à regra de LGPD do `CLAUDE.md`.
+- [ ] **Intenção via LLM** com saída estruturada, mantendo a palavra-chave como fallback quando o LLM está fora
+- [ ] **`fallback_node`** — saudação, fora de escopo ("e o auxílio-doença?"), mensagem incompreensível → resposta educada + encaminhamento (INSS 135 / Defensoria)
+- [ ] **Avaliação ponta a ponta** — `scripts/eval_agente.py` com ~20 conversas-roteiro: veredito correto, fonte citada existe nos trechos, sem valores inventados (LLM-as-judge + checagens determinísticas)
+- [ ] Alinhar `CLAUDE.md` e `README.md` com a stack real (sem Bedrock)
+
+## Fase 3 — API HTTP do agente ⬜
+
+Uma API única que os dois canais (WhatsApp e web) usam. Sem ela, cada canal
+reimplementaria o agente.
+
+- [ ] FastAPI: `POST /chat` `{session_id, mensagem}` → `{resposta, fontes, avaliacao?}`; `GET /health`
+- [ ] Qdrant em **modo servidor** (Docker no dev; Qdrant Cloud free tier ou container junto da API em produção) — o modo arquivo não aceita vários processos
+- [ ] Índice criado no build/deploy (ingestão como etapa, não manual)
+- [ ] `Dockerfile` da API (com o modelo de embedding já baixado na imagem, para não baixar a cada cold start)
+- [ ] Rate limit por sessão e timeout do LLM com resposta de contingência
+- [ ] Observabilidade: log estruturado por requisição (latência, tokens, custo, rota do grafo) — **sem gravar o conteúdo das mensagens**; opcional: Langfuse/LangSmith com mascaramento
+- [ ] Testes da API com `httpx`/`TestClient` usando o `FakeLLM` que já existe
+
+## Fase 4 — Canal WhatsApp ⬜
+
+**Por que antes da web:** o público do Amparo (idosos, pessoas de baixa renda,
+cuidadores de pessoas com deficiência) usa WhatsApp, não apps. É o canal que
+dá sentido ao projeto — e o diferencial do portfólio.
+
+**Abordagem recomendada: WhatsApp Cloud API oficial da Meta + webhook próprio
+na FastAPI.** Sem n8n no meio (a API já resolve; menos peças, código que
+aparece no portfólio). Evitar bibliotecas não oficiais (Baileys, Evolution
+API, "WhatsApp Web"): violam os termos, o número pode ser banido, e o projeto
+lida com dados sensíveis de público vulnerável.
+
+```
+Pessoa no WhatsApp
+      │ mensagem
+      ▼
+Meta (WhatsApp Cloud API) ──POST webhook──▶ FastAPI /webhook/whatsapp
+                                              │ 1. valida assinatura (X-Hub-Signature-256)
+                                              │ 2. responde 200 na hora
+                                              │ 3. processa em background
+                                              ▼
+                                        grafo LangGraph (thread_id = hash do telefone)
+                                              │
+FastAPI ──POST /{phone_id}/messages──▶ Meta ──▶ resposta no WhatsApp
+```
+
+4.1 Preparação (sem código)
+- [ ] Criar conta Meta for Developers + app do tipo "Business" + produto WhatsApp
+- [ ] Usar o **número de teste** que a Meta fornece (envia só para até 5 números cadastrados — suficiente para desenvolver)
+- [ ] Gerar token de acesso permanente (System User) — o token do painel expira em 24 h
+- [ ] Expor a API local com `ngrok`/`cloudflared` para a Meta alcançar o webhook
+
+4.2 Webhook mínimo ("eco")
+- [ ] `GET /webhook/whatsapp` — verificação (`hub.mode`, `hub.verify_token`, devolver `hub.challenge`)
+- [ ] `POST /webhook/whatsapp` — validar assinatura com o App Secret, extrair `from` + texto, responder 200 imediatamente
+- [ ] Cliente de envio (`httpx` → Graph API `/messages`) — primeiro só devolve o texto recebido
+- [ ] Idempotência: a Meta reenvia eventos; ignorar `message.id` já processado
+- [ ] Ignorar eventos de status (entregue/lido) e mensagens de grupos
+
+4.3 Ligar o agente
+- [ ] Webhook chama o mesmo serviço do `POST /chat`; `session_id` = hash (SHA-256 + sal) do telefone — o número nunca vai para o estado nem para os logs
+- [ ] Adaptar a resposta ao WhatsApp: limite de 4.096 caracteres (quebrar em partes), negrito com `*`, sem markdown de link
+- [ ] Mensagem de boas-vindas na primeira interação com o **disclaimer completo** + aviso de privacidade; nas respostas seguintes, rodapé curto ("Orientação informativa · não é o INSS"). *(Decisão a registrar em ADR: adapta a regra nº 4 do `CLAUDE.md` ao formato do canal.)*
+- [ ] Comando "apagar" / "sair" → apaga a sessão na hora (LGPD)
+
+4.4 Experiência pensada para o público
+- [ ] Botões de resposta (até 3) e listas (até 10) na coleta de dados — "Por idade / Por deficiência", "Quantas pessoas moram com você?"
+- [ ] **Áudio**: transcrever mensagens de voz (Whisper local ou API) — boa parte do público prefere mandar áudio
+- [ ] Indicador de "lendo…" (marcar como lida) enquanto o agente processa
+
+4.5 Produção
+- [ ] Número próprio (chip dedicado, não o pessoal) registrado na Cloud API + verificação do negócio, se for abrir para o público
+- [ ] Custo: respostas dentro da janela de 24 h após a pessoa escrever são **gratuitas** na Cloud API; o Amparo só responde (não dispara mensagens), então o custo do WhatsApp tende a zero — o custo real é o LLM
+- [ ] Política: em jan/2026 a Meta proibiu assistentes de IA **de uso geral** na Business API (o CADE suspendeu a regra para números +55). O Amparo é um bot de serviço específico, mas manter o escopo restrito ao BPC e acompanhar a regra
+
+## Fase 5 — Demo web ⬜
+
+Para quem avalia o portfólio conseguir testar sem cadastrar telefone.
+
+- [ ] Chat web mínimo consumindo `POST /chat` (reaproveitar padrões de UI do `certara-agent`)
+- [ ] Mostrar as fontes citadas como cartões clicáveis e o resultado da elegibilidade com o cálculo aberto (renda considerada × limite)
+- [ ] Acessibilidade: teclado, ARIA, contraste AA, fonte grande, `prefers-reduced-motion`
+- [ ] Disclaimer visível e permanente
+- [ ] Limite de uso por IP (demo pública com LLM pago)
+
+## Fase 6 — Qualidade, conformidade e deploy ⬜
+
+- [ ] CI no GitHub Actions: `pytest` + `eval_retrieval` (falha se recall@5 < 0,8) + `eval_agente`
+- [ ] E2E com Playwright na demo web; teste do webhook com payloads reais da Meta (fixtures)
+- [ ] Revisão LGPD documentada (`docs/lgpd.md`): o que é coletado, por quanto tempo, como apagar; nada sensível fora da sessão; telefone só como hash
+- [ ] Deploy: container da API (AWS Lambda com imagem de container via SAM, como no `certara-agent`, **ou** Fly.io/Render). Atenção: o modelo de embedding (~470 MB) pesa no cold start da Lambda — medir antes de decidir
+- [ ] Segredos fora do código (token da Meta, App Secret, chave do LLM)
+- [ ] Rotina para atualizar parâmetros anuais (salário mínimo de janeiro) e reindexar fontes quando a legislação mudar
+
+## Fase 7 — Portfólio ⬜
+
+- [ ] README reescrito como estudo de caso: problema → público → decisões de arquitetura → resultados
+- [ ] Diagrama da arquitetura (grafo + RAG + canais)
+- [ ] Vídeo/GIF de 60–90 s: conversa no WhatsApp do "oi" até o checklist de documentos
+- [ ] Números que mostram rigor: recall@5 do RAG, acerto do motor de elegibilidade, nº de testes, latência média, custo por conversa
+- [ ] Seção "Decisões que tomei e por quê" (ADRs): elegibilidade determinística em vez de LLM, RAG curado em vez de crawler, embeddings locais, API oficial do WhatsApp em vez de não oficial
+- [ ] Post no LinkedIn / artigo curto contando o projeto
+
+## Fase 8 — Extensão (pós-MVP) ⬜
+
+- [ ] Projeto irmão (leitura assistida de documentos para acessibilidade) como módulo do Amparo — ex.: a pessoa manda foto de uma carta do INSS e o Amparo explica
+- [ ] Outros benefícios (auxílio por incapacidade temporária, aposentadoria por incapacidade permanente)
+- [ ] Busca de CRAS mais próximo para inscrição/atualização do CadÚnico
