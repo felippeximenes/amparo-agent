@@ -51,8 +51,9 @@ LangGraph:
   — neste domínio precisão importa mais que cobertura. Embeddings **locais**
   (`fastembed`, modelo multilíngue) — a busca não depende de API externa; no
   dev o Qdrant roda em modo arquivo (`./qdrant_data/`).
-- **Modelo (LLM)**: Amazon Bedrock, com fallback (mesmo padrão do
-  `certara-agent`). Entra só na Fase 2 — não é usado no RAG.
+- **Modelo (LLM)**: via endpoint compatível com OpenAI (Ollama local por
+  padrão; OpenAI como alternativa configurável). Entra só na Fase 2 — não é
+  usado no RAG (o RAG usa embeddings locais via `fastembed`, ver item acima).
 - **Estado de sessão**: Postgres (Neon), sem dado sensível persistido.
 - **Deploy**: AWS SAM (mesmo padrão do `certara-agent`), quando o projeto
   chegar na fase de deploy.
@@ -65,6 +66,8 @@ LangGraph:
   de borda correspondente (ex.: renda exatamente no limite).
 - `ROADMAP.md` é a fonte de verdade do que já foi feito — atualize os
   checkboxes conforme o trabalho avança, não deixe a lista ficar desatualizada.
+- Commits e PRs sem trailer Co-Authored-By nem menção ao Claude; autor =
+  configuração git local.
 
 ## Skills
 
@@ -91,7 +94,7 @@ relevantes nas fases 0–2.
 ## Fora de escopo por enquanto
 
 - Autenticação / contas de usuário
-- Canal WhatsApp (Fase 5 do roadmap)
+- Canal WhatsApp (Fase 4 do roadmap)
 - Outros benefícios além de BPC/LOAS (Fase 5)
 - Leitura assistida de documentos para acessibilidade — projeto irmão que
   entra como módulo do Amparo na Fase 5, não antes

@@ -10,7 +10,7 @@ Legenda: `[x]` feito · `[~]` parcial · `[ ]` a fazer
 
 ## Onde estamos (revisão de 15/10/2026)
 
-Último commit: 02/09/2026 (`fc581e1`). **41 testes passando.**
+Último commit: 02/09/2026 (`fc581e1`). **46 testes passando.**
 
 | Fase | Situação |
 |---|---|
@@ -34,15 +34,11 @@ resposta do RAG.
 1. **Cada mensagem é independente.** O grafo não guarda histórico: para checar
    elegibilidade, a pessoa precisa contar idade, quem mora na casa e a renda de
    todos *numa única mensagem*. É o bloqueio nº 1 para o WhatsApp.
-2. **Salário mínimo desatualizado.** `PARAMETROS_2025` usa R$ 1.518 (limite
-   R$ 379,50). Em 2026 o SM é **R$ 1.621** → limite de 1/4 = **R$ 405,25**.
-   Alguém com renda per capita entre esses dois valores recebe hoje um
-   "não atende" errado. Conferir também se o Anexo I da Portaria 34/2025
-   (deduções de saúde) teve valores revistos.
-3. **Documentação divergente do código.** `CLAUDE.md` e a Fase 0 falam em
-   Amazon Bedrock/Titan; o código usa `fastembed` + endpoint OpenAI-compatível
-   (Ollama/OpenAI). O item "Plugar um LLM" estava desmarcado, mas foi feito em
-   01/09.
+2. ~~**Salário mínimo desatualizado.**~~ Resolvido em 15/10/2026:
+   `PARAMETROS_2026` (SM R$ 1.621, limite R$ 405,25) + `parametros_vigentes(data)`.
+   Anexo I (deduções de saúde) conferido — sem reajuste na Portaria 34/2025.
+3. ~~**Documentação divergente do código.**~~ Resolvido em 15/10/2026:
+   `CLAUDE.md` já não cita Bedrock.
 4. **Qdrant em modo arquivo** só aceita um processo — serve para o CLI, não
    para um servidor web/webhook com vários workers.
 5. Intenção classificada só por palavra-chave (frágil para fala coloquial) e
@@ -74,17 +70,17 @@ Já feito:
 - [x] Motor de elegibilidade determinístico — `src/amparo/rules/elegibilidade.py` (idade, renda per capita, exclusões e deduções do Anexo I da Portaria 34/2025; deficiência sempre `depende_de_avaliacao`), com testes de borda
 - [x] Citação obrigatória de fonte + disclaimer em toda resposta
 - [x] LLM plugado — `src/amparo/llm.py` (`ChatLLM`, Ollama ou OpenAI): extrai o `Caso` da fala (JSON) e redige a resposta do RAG; modo template quando não há LLM; contador de tokens/custo
+- [x] **Atualizar parâmetros para 2026** — `PARAMETROS_2026` (SM R$ 1.621) e `parametros_vigentes(data)` escolhe o parâmetro pela data; `avaliar()` usa o vigente hoje por padrão. Testes de borda em R$ 405,25. Anexo I conferido (sem reajuste).
 - [~] Fluxo completo via CLI — funciona para pergunta única
 
 A fazer (nesta ordem):
 
-- [ ] **Atualizar parâmetros para 2026** — `PARAMETROS_2026` (SM R$ 1.621, vigência 01/01/2026) e seleção do parâmetro pela data; testes de borda em R$ 405,25. Revisar valores do Anexo I.
 - [ ] **Conversa multi-turno** — o `Caso` passa a ser montado aos poucos: o estado guarda o histórico e os dados já coletados; o agente pergunta *um dado por vez* o que falta (rota → idade → quem mora na casa → renda de cada um → gastos de saúde) e só chama `avaliar()` quando o `Caso` está completo. Ideal para botões do WhatsApp na Fase 4.
 - [ ] **Memória de sessão** — checkpointer do LangGraph com `thread_id` por conversa. Dev: `MemorySaver`/SQLite; produção: Postgres (Neon). Expiração automática (ex.: 24 h sem mensagem → apaga o estado) — atende à regra de LGPD do `CLAUDE.md`.
 - [ ] **Intenção via LLM** com saída estruturada, mantendo a palavra-chave como fallback quando o LLM está fora
 - [ ] **`fallback_node`** — saudação, fora de escopo ("e o auxílio-doença?"), mensagem incompreensível → resposta educada + encaminhamento (INSS 135 / Defensoria)
 - [ ] **Avaliação ponta a ponta** — `scripts/eval_agente.py` com ~20 conversas-roteiro: veredito correto, fonte citada existe nos trechos, sem valores inventados (LLM-as-judge + checagens determinísticas)
-- [ ] Alinhar `CLAUDE.md` e `README.md` com a stack real (sem Bedrock)
+- [x] Alinhar `CLAUDE.md` e `README.md` com a stack real (sem Bedrock)
 
 ## Fase 3 — API HTTP do agente ⬜
 
