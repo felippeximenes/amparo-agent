@@ -10,13 +10,13 @@ Legenda: `[x]` feito · `[~]` parcial · `[ ]` a fazer
 
 ## Onde estamos (revisão de 15/10/2026)
 
-Último commit: 15/10/2026. **154 testes passando.**
+Último commit: 15/10/2026. **157 testes passando.**
 
 | Fase | Situação |
 |---|---|
 | 0 — Fundação | ✅ concluída |
 | 1 — Curadoria + RAG | ✅ concluída (recall@5 = 82%, 40 perguntas) — 1 fonte pendente |
-| 2 — Núcleo do agente | ✅ concluída (avaliação ponta a ponta no ar) |
+| 2 — Núcleo do agente | 🟡 veredito errado em 2 de 3 rodadas — ver lacuna 5 |
 | 3 — API HTTP | ⬜ não iniciada |
 | 4 — Canal WhatsApp | ⬜ não iniciada |
 | 5 — Demo web | ⬜ não iniciada |
@@ -31,7 +31,9 @@ confirmação vazia só na etapa certa) → resposta com fonte + disclaimer. O L
 (Ollama ou OpenAI, via endpoint compatível) extrai só os campos NOVOS de cada
 fala e redige a resposta do RAG. Um desvio de assunto no meio da coleta
 ("e quais documentos?") é respondido pelo RAG sem perder o que já foi
-coletado. Sessão expira em 24h sem mensagem ou na hora com "apagar". A
+coletado — se a extração não avançar a etapa pendente, uma 2ª tentativa
+focada (`llm.extrair_foco`) é feita antes de repetir a pergunta. Sessão
+expira em 24h sem mensagem ou na hora com "apagar". A
 intenção agora é classificada pelo LLM (6 categorias, saída estruturada:
 elegibilidade/checklist/duvida/saudacao/fora_de_escopo/apagar), com a
 palavra-chave como fallback; saudação, fora de escopo, mensagem
@@ -52,14 +54,25 @@ incompreensível e apagar passam pelo `fallback_node`.
    `CLAUDE.md` já não cita Bedrock.
 4. **Qdrant em modo arquivo** só aceita um processo — serve para o CLI, não
    para um servidor web/webhook com vários workers.
-5. **Extração por LLM ainda tem ruído run-a-run.** `eval_agente.py` com
-   gpt-4o-mini variou 75%–90% de acerto entre execuções idênticas (abaixo
-   do limiar de 95%) — a mesma fala às vezes não é extraída na hora (ex.:
-   "sim, dura mais de 2 anos" só vira `impedimento_min_2_anos` um turno
-   depois). Não é determinismo de código; é variação do modelo em
-   extração estruturada multi-campo. Considerar: gpt-4o para extração,
-   ou uma validação/retry quando a resposta não muda o `caso_parcial`
-   apesar de a fala claramente responder à pergunta pendente.
+5. **Extração por LLM ainda tem ruído run-a-run — Fase 2 não fecha por isso.**
+   `eval_agente.py` agora separa duas métricas (antes misturadas num só
+   "acerto"): **veredito errado** (motor chega a um resultado definitivo
+   diferente do esperado — sempre bug, meta 0) e **conversa não concluída**
+   (terminou pedindo dado — normalmente ruído de extração num turno, meta
+   ≥ 90%). Com `coleta.deduplicar_renda` e a 2ª tentativa focada
+   (`llm.extrair_foco`), "não concluída" ficou saudável (95%, 95%, 100% em
+   3 rodadas com gpt-4o-mini). **Veredito errado não ficou em 0**: 1/20 em
+   2 das 3 rodadas, sempre a mesma conversa
+   (`bolsa-familia-conta-como-renda-nao-atende`) — o modelo às vezes
+   reclassifica a renda do requerente de `renda_trabalho` para
+   `beneficios_previdenciarios` numa fala que não é sobre renda, escapando
+   do `deduplicar_renda` (que só zera duplicata, não a reclassificação
+   pura). Com `gpt-4o` (só para comparação, LLM_MODEL na linha de comando,
+   `.env` não alterado): 0 veredito errado, 100% concluídas nas 20
+   conversas — mas o preço no `.env` ainda é o do gpt-4o-mini, então o
+   custo impresso não vale para essa comparação (ver RESUMO FINAL da
+   sessão de 15/10/2026 para a estimativa corrigida). Não troquei o modelo
+   padrão — decisão de quem lê isto.
 6. ~~**Intenção classificada só por palavra-chave e sem `fallback_node`.**~~
    Resolvido em 15/10/2026: classificação pelo LLM (6 categorias) com a
    palavra-chave como fallback; `fallback_node` trata saudação, fora de
@@ -98,7 +111,7 @@ Já feito:
 - [x] **Intenção via LLM** com saída estruturada (`llm.classificar_intencao` + `llm.interpretar_intencao`, 6 categorias) — mantém a palavra-chave como fallback quando o LLM está fora ou não dá para interpretar a saída. Em meio a uma coleta, só um desvio claro interrompe (checklist/dúvida/apagar vindos do LLM; só checklist se caiu na palavra-chave, que não é confiável para "dúvida").
 - [x] **`fallback_node`** — saudação (boas-vindas + o que o Amparo faz), fora de escopo ("e o auxílio-doença?" → só cubro BPC/LOAS, encaminha INSS 135/Meu INSS/Defensoria), mensagem incompreensível → pede para reformular com exemplo. "Apagar" também passa por aqui (confirma o texto); quem apaga de fato é o canal, lendo `Estado["intencao"]`.
 - [x] **Correções encontradas via `diagnosing-bugs` + `eval_agente.py`**: idade >= 65 na primeira fala infere `rota` deterministicamente (`coleta.inferir_rota_por_idade`) — o LLM extraía a idade mas não preenchia `rota` sozinho, e a coleta pedia a rota de novo; filho/enteado/irmão só entra no grupo familiar se solteiro (`coleta.filtrar_grupo_familiar`, LOAS art. 20 §1º); `fundir_caso_parcial` mescla `outros_membros` por posição (não substitui a lista inteira) — o LLM as vezes restabelece um membro só com o campo novo, perdendo parentesco/idade já sabidos; `coleta.deduplicar_renda` corrige o LLM repetir o mesmo valor de aposentadoria em `renda_trabalho` E `beneficios_previdenciarios`, o que bloquearia a exclusão de 1 SM do idoso/deficiente.
-- [x] **Avaliação ponta a ponta** — `scripts/eval_agente.py` com 20 conversas-roteiro em `tests/fixtures/conversas/` (YAML): veredito/intenção correto, disclaimer presente, nenhum valor em R$ fora do motor; relatório em `eval_agente.json` (gitignored); sai com código 1 se o acerto ficar abaixo de 95%. Acerto observado: **90% numa execução limpa, variando 75–90% entre execuções** por ruído de extração do LLM (lacuna nº 5 acima) — não é um bug de código, é a avaliação cumprindo o papel de medir a confiabilidade real.
+- [~] **Avaliação ponta a ponta** — `scripts/eval_agente.py` com 20 conversas-roteiro em `tests/fixtures/conversas/` (YAML). Duas métricas separadas: **veredito errado** (meta 0, sai 1 se > 0) e **conversa não concluída** (meta ≥ 90%); também checa disclaimer e nenhum valor em R$ fora do motor; relatório em `eval_agente.json` (gitignored). 3 rodadas com gpt-4o-mini: não concluídas 95%/95%/100% (saudável) mas **veredito errado 1/0/1** — não fecha a meta de 0. Mesma conversa falhando nas duas vezes (lacuna nº 5). `coleta.deduplicar_renda` e `llm.extrair_foco` (2ª tentativa de extração focada na etapa pendente) já implementados; falta eliminar essa reclassificação específica.
 - [x] Alinhar `CLAUDE.md` e `README.md` com a stack real (sem Bedrock)
 
 ## Fase 3 — API HTTP do agente ⬜
