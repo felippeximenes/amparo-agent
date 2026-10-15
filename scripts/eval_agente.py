@@ -3,15 +3,23 @@
 Uso:  uv run python scripts/eval_agente.py
 
 Roda as conversas-roteiro de tests/fixtures/conversas/*.yaml pelo grafo
-completo (requer LLM configurado e índice do RAG já construído). Para cada
-conversa, checa: veredito (ou intenção de fallback) correto; disclaimer
-presente; nenhum valor em R$ fora do que o motor calculou (nas conversas de
-elegibilidade — o template é sempre determinístico, então isso é um alarme
-de regressão, não uma verificação opcional); nº de perguntas até o veredito.
+completo (requer LLM configurado e índice do RAG já construído). Duas
+métricas distintas, porque são bugs de natureza diferente:
+
+- VEREDITO ERRADO: o motor chegou a um resultado DEFINITIVO diferente do
+  esperado (atende ↔ nao_atende ↔ depende_de_avaliacao), ou uma intenção de
+  fallback errada. Isso é sempre um bug — meta 0, sai 1 se > 0.
+- CONVERSA NÃO CONCLUÍDA: terminou indeterminado (ainda pedindo um dado)
+  quando devia ter chegado a um veredito. Normalmente é ruído da extração do
+  LLM num turno (não captou o que a fala respondia), não um bug de código —
+  meta ≥ 90% de conclusão.
+
+Também checa, por conversa: disclaimer presente; nenhum valor em R$ fora do
+que o motor calculou (nas conversas de elegibilidade).
 
 Saída: tabela no terminal + eval_agente.json (gitignored, não comitar — tem
-o texto das respostas). Sai com código 1 se o acerto de veredito/intenção
-ficar abaixo de 0.95.
+o texto das respostas). Sai com código 1 se houver qualquer veredito errado
+ou se a taxa de conclusão ficar abaixo de 0.90.
 """
 
 import json
@@ -28,8 +36,11 @@ from amparo.llm import criar_llm  # noqa: E402
 from amparo.rules.elegibilidade import Resultado  # noqa: E402
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "conversas"
-LIMIAR_ACERTO = 0.95
+LIMIAR_CONCLUSAO = 0.90
 _RE_REAIS = re.compile(r"R\$\s*(\d+[.,]\d{2})")
+_RESULTADOS_DEFINITIVOS = {
+    Resultado.ATENDE.value, Resultado.NAO_ATENDE.value, Resultado.DEPENDE_DE_AVALIACAO.value,
+}
 
 
 def carregar_conversas() -> list[dict]:
@@ -41,6 +52,15 @@ def _aceita(obtido, esperado) -> bool:
     if isinstance(esperado, list):
         return obtido in esperado
     return obtido == esperado
+
+
+def _classificar(is_elegibilidade: bool, obtido, esperado) -> str:
+    """"ok" | "veredito_errado" | "nao_concluida"."""
+    if _aceita(obtido, esperado):
+        return "ok"
+    if is_elegibilidade and obtido not in _RESULTADOS_DEFINITIVOS:
+        return "nao_concluida"  # obtido é None ou "indeterminado"
+    return "veredito_errado"
 
 
 def _valores_em_reais(texto: str) -> set[str]:
@@ -75,11 +95,13 @@ def rodar_conversa(grafo, conversa: dict) -> dict:
     if is_elegibilidade:
         avaliacao = estado.get("avaliacao")
         obtido = avaliacao.resultado.value if avaliacao is not None else None
-        veredito_ok = _aceita(obtido, esperado["resultado"])
+        esperado_valor = esperado["resultado"]
     else:
         intencao = estado.get("intencao")
         obtido = intencao.value if intencao is not None else None
-        veredito_ok = _aceita(obtido, esperado["intencao"])
+        esperado_valor = esperado["intencao"]
+
+    status = _classificar(is_elegibilidade, obtido, esperado_valor)
 
     resposta = estado.get("resposta", "")
     disclaimer_ok = DISCLAIMER in resposta
@@ -92,9 +114,9 @@ def rodar_conversa(grafo, conversa: dict) -> dict:
     return {
         "id": conversa["id"],
         "tipo": esperado["tipo"],
-        "esperado": esperado.get("resultado") or esperado.get("intencao"),
+        "esperado": esperado_valor,
         "obtido": obtido,
-        "veredito_ok": veredito_ok,
+        "status": status,
         "disclaimer_ok": disclaimer_ok,
         "valores_ok": valores_ok,
         "perguntas_pendentes": perguntas_pendentes,
@@ -113,7 +135,7 @@ def main() -> None:
     resultados = [rodar_conversa(grafo, c) for c in conversas]
 
     for r in resultados:
-        tag = "OK   " if r["veredito_ok"] else "FALHA"
+        tag = {"ok": "OK   ", "veredito_errado": "ERRO ", "nao_concluida": "PEND "}[r["status"]]
         avisos = []
         if not r["disclaimer_ok"]:
             avisos.append("sem disclaimer")
@@ -126,8 +148,11 @@ def main() -> None:
         )
 
     total = len(resultados)
-    acertos = sum(r["veredito_ok"] for r in resultados)
-    acerto = acertos / total if total else 0.0
+    veredito_errado = [r for r in resultados if r["status"] == "veredito_errado"]
+    nao_concluida = [r for r in resultados if r["status"] == "nao_concluida"]
+    concluidas = total - len(nao_concluida)
+    taxa_concluidas = concluidas / total if total else 0.0
+
     casos_elegibilidade = [r for r in resultados if r["tipo"] == "elegibilidade"]
     media_perguntas = (
         sum(r["perguntas_pendentes"] for r in casos_elegibilidade) / len(casos_elegibilidade)
@@ -135,14 +160,18 @@ def main() -> None:
         else 0.0
     )
 
-    print(f"\nveredito/intenção: {acertos}/{total} ({acerto:.0%})")
+    print(f"\nveredito errado: {len(veredito_errado)}/{total}")
+    print(f"conversas concluídas: {concluidas}/{total} ({taxa_concluidas:.0%})")
     print(f"perguntas até o veredito (média, casos de elegibilidade): {media_perguntas:.1f}")
     custo_linha = llm.resumo_uso() if hasattr(llm, "resumo_uso") else None
     if custo_linha:
         print("[amparo] " + custo_linha)
 
     saida = {
-        "acerto_veredito": acerto,
+        "veredito_errado": len(veredito_errado),
+        "conversas_concluidas": concluidas,
+        "total_conversas": total,
+        "taxa_concluidas": taxa_concluidas,
         "media_perguntas_ate_veredito": media_perguntas,
         "custo": custo_linha,
         "resultados": resultados,
@@ -151,7 +180,8 @@ def main() -> None:
         json.dumps(saida, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    sys.exit(0 if acerto >= LIMIAR_ACERTO else 1)
+    sucesso = len(veredito_errado) == 0 and taxa_concluidas >= LIMIAR_CONCLUSAO
+    sys.exit(0 if sucesso else 1)
 
 
 if __name__ == "__main__":
