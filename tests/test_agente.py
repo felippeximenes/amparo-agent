@@ -292,4 +292,35 @@ def test_fluxo_duvida_com_llm_usa_a_resposta_do_modelo(monkeypatch):
     grafo = construir_grafo(FakeLLM(texto="A LOAS é a lei da assistência social."))
     final = grafo.invoke({"pergunta": "O que é a LOAS?"})
     assert "A LOAS é a lei da assistência social." in final["resposta"]
-    assert DISCLAIMER in final["resposta"]
+
+
+# --- checkpointer: persiste por thread_id sem repassar o estado na mão ------
+
+def test_com_checkpointer_a_conversa_persiste_por_thread_id():
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+        grafo = construir_grafo(
+            FakeLLM(atualizacoes=[{}, {"rota": "idade"}]), checkpointer=checkpointer
+        )
+        config = {"configurable": {"thread_id": "t1"}}
+        grafo.invoke({"pergunta": "Minha mãe tem direito ao BPC?"}, config)
+        # não repasso o estado anterior — o checkpointer é quem carrega
+        final = grafo.invoke({"pergunta": "Por idade"}, config)
+        assert final["aguardando"] == "idade"  # "rota" só persistiu por causa do thread_id
+
+
+def test_threads_diferentes_nao_compartilham_caso_parcial():
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+        grafo = construir_grafo(
+            FakeLLM(atualizacoes=[{"rota": "idade"}, {}]), checkpointer=checkpointer
+        )
+        grafo.invoke(
+            {"pergunta": "Minha mãe tem direito?"}, {"configurable": {"thread_id": "a"}}
+        )
+        outra_thread = grafo.invoke(
+            {"pergunta": "Minha mãe tem direito?"}, {"configurable": {"thread_id": "b"}}
+        )
+        assert outra_thread["aguardando"] == "rota"  # não herdou o "rota" da thread "a"

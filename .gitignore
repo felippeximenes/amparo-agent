@@ -53,3 +53,7 @@ ingest.txt
 eval.txt
 testes.txt
 bm25_idf.json
+
+# --- Memória de sessão (checkpointer SQLite, dados de conversas) ---
+sessoes.db
+sessoes.db-*

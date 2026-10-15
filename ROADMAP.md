@@ -10,27 +10,28 @@ Legenda: `[x]` feito · `[~]` parcial · `[ ]` a fazer
 
 ## Onde estamos (revisão de 15/10/2026)
 
-Último commit: 15/10/2026. **79 testes passando.**
+Último commit: 15/10/2026. **103 testes passando.**
 
 | Fase | Situação |
 |---|---|
 | 0 — Fundação | ✅ concluída |
 | 1 — Curadoria + RAG | ✅ concluída (recall@5 = 85%) — 1 fonte pendente |
-| 2 — Núcleo do agente | 🟡 ~75% — conversa multi-turno pronta, falta memória de sessão |
+| 2 — Núcleo do agente | 🟡 ~85% — conversa multi-turno e memória de sessão prontas |
 | 3 — API HTTP | ⬜ não iniciada |
 | 4 — Canal WhatsApp | ⬜ não iniciada |
 | 5 — Demo web | ⬜ não iniciada |
 | 6 — Qualidade, LGPD e deploy | ⬜ não iniciada |
 | 7 — Portfólio | ⬜ não iniciada |
 
-**O que já funciona hoje:** conversa multi-turno pelo CLI (`scripts/chat.py`,
-estado em memória no processo) → intenção por palavra-chave → RAG híbrido
-(denso + BM25 + RRF) **ou** motor de elegibilidade determinístico, coletando
-o `Caso` aos poucos (um dado por vez) → resposta com fonte + disclaimer. O LLM
+**O que já funciona hoje:** conversa multi-turno pelo CLI (`scripts/chat.py
+--sessao NOME`, persistida entre execuções via checkpointer + SQLite) →
+intenção por palavra-chave → RAG híbrido (denso + BM25 + RRF) **ou** motor de
+elegibilidade determinístico, coletando o `Caso` aos poucos (um dado por vez,
+confirmação vazia só na etapa certa) → resposta com fonte + disclaimer. O LLM
 (Ollama ou OpenAI, via endpoint compatível) extrai só os campos NOVOS de cada
 fala e redige a resposta do RAG. Um desvio de assunto no meio da coleta
 ("e quais documentos?") é respondido pelo RAG sem perder o que já foi
-coletado.
+coletado. Sessão expira em 24h sem mensagem ou na hora com "apagar".
 
 **Principais lacunas encontradas na revisão:**
 
@@ -78,11 +79,11 @@ Já feito:
 - [x] LLM plugado — `src/amparo/llm.py` (`ChatLLM`, Ollama ou OpenAI): extrai o `Caso` da fala (JSON) e redige a resposta do RAG; modo template quando não há LLM; contador de tokens/custo
 - [x] **Atualizar parâmetros para 2026** — `PARAMETROS_2026` (SM R$ 1.621) e `parametros_vigentes(data)` escolhe o parâmetro pela data; `avaliar()` usa o vigente hoje por padrão. Testes de borda em R$ 405,25. Anexo I conferido (sem reajuste).
 - [x] **Conversa multi-turno** — `src/amparo/coleta.py` (`PERGUNTAS`, `proximo_dado_faltante`, `fundir_caso_parcial`, `marcar_etapas_respondidas`, código puro e testado) + `Estado.caso_parcial`/`aguardando`/`opcoes` em `agente.py`. O agente pergunta *um dado por vez* (rota → idade/impedimento → quem mora na casa → renda de cada um → gastos de saúde) e só chama `avaliar()` quando o `Caso` está completo; atalho se a primeira fala já tiver tudo; desvio de assunto no meio responde pelo RAG sem perder o `caso_parcial`. Nenhuma etapa é dada como respondida por um marcador do LLM — só pela presença explícita dos dados no `caso_parcial` (corrige um bug em que o modelo pulava a pergunta sobre quem mora na casa). `scripts/chat.py` carrega o `Estado` entre turnos (em memória no processo — persistência é o P3). `opcoes` de cada pergunta já no formato de botões para o WhatsApp.
-- [~] Fluxo completo via CLI — funciona multi-turno em memória no processo (sem persistir entre execuções — isso é o P3)
+- [x] **Memória de sessão** — `src/amparo/sessao.py`: checkpointer do LangGraph (SQLite em dev, `./sessoes.db` gitignored; Postgres via `SESSION_DB_URL` reservado por configuração, não implementado) + `thread_id` = `session_id_de(identificador)` (HMAC-SHA256, nunca o telefone/CPF cru) + `limpar_sessoes_expiradas()` (sem mensagem há mais de `SESSION_TTL_HORAS`, padrão 24h, chamada a cada turno do `chat.py`) + comando "apagar"/"apagar meus dados"/"sair" apaga a thread na hora. Decisão registrada em `docs/adr/0002-memoria-de-sessao-e-lgpd.md`.
+- [x] Fluxo completo via CLI — `scripts/chat.py --sessao NOME` retoma a conversa entre execuções
 
 A fazer (nesta ordem):
 
-- [ ] **Memória de sessão** — checkpointer do LangGraph com `thread_id` por conversa. Dev: `MemorySaver`/SQLite; produção: Postgres (Neon). Expiração automática (ex.: 24 h sem mensagem → apaga o estado) — atende à regra de LGPD do `CLAUDE.md`.
 - [ ] **Intenção via LLM** com saída estruturada, mantendo a palavra-chave como fallback quando o LLM está fora
 - [ ] **`fallback_node`** — saudação, fora de escopo ("e o auxílio-doença?"), mensagem incompreensível → resposta educada + encaminhamento (INSS 135 / Defensoria)
 - [ ] **Avaliação ponta a ponta** — `scripts/eval_agente.py` com ~20 conversas-roteiro: veredito correto, fonte citada existe nos trechos, sem valores inventados (LLM-as-judge + checagens determinísticas)

@@ -42,5 +42,15 @@ class Settings(BaseSettings):
     llm_preco_entrada: float = 0.0
     llm_preco_saida: float = 0.0
 
+    # Memória de sessão (checkpointer do LangGraph) — ver docs/adr/0002.
+    # Segredo do HMAC que vira o thread_id; nunca o telefone/CPF cru.
+    session_salt: str = ""
+    # Dev/testes: SQLite num arquivo gitignored. Produção troca para Postgres
+    # (Neon) só preenchendo SESSION_DB_URL — a infra de Postgres não está
+    # implementada ainda (ver ADR 0002).
+    session_sqlite_path: str = "./sessoes.db"
+    session_db_url: str = ""
+    session_ttl_horas: float = 24.0
+
 
 settings = Settings()

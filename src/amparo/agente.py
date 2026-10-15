@@ -1,8 +1,11 @@
 """Grafo do agente Amparo (LangGraph).
 
-`construir_grafo(llm)` monta `intake → {elegibilidade | rag} → resposta`. O
-`Estado` é passado inteiro entre chamadas de `grafo.invoke()` (ver
-`scripts/chat.py`) — é assim que a conversa segue de um turno para o outro.
+`construir_grafo(llm, checkpointer)` monta `intake → {elegibilidade | rag} →
+resposta`. Com `checkpointer` (ver `amparo.sessao`), o `Estado` persiste por
+`thread_id` entre chamadas de `grafo.invoke()` — a conversa segue de um
+turno para o outro sem precisar repassar o estado manualmente (ver
+`scripts/chat.py`). Sem `checkpointer` (como nos testes), cada `invoke()`
+começa do zero — por isso os testes repassam o estado anterior na mão.
 
 - `intake` classifica a intenção por palavra-chave; em meio a uma coleta
   (`aguardando` setado), qualquer fala que não seja um desvio para o
@@ -137,7 +140,7 @@ def compor_resposta(
     return "\n\n".join(partes)
 
 
-def construir_grafo(llm: LLM | None = None):
+def construir_grafo(llm: LLM | None = None, checkpointer=None):
     def no_intake(estado: Estado) -> dict:
         pergunta = estado.get("pergunta", "")
         mensagens = [*estado.get("mensagens", []), {"role": "usuario", "texto": pergunta}]
@@ -236,4 +239,4 @@ def construir_grafo(llm: LLM | None = None):
     g.add_edge("elegibilidade", "resposta")
     g.add_edge("rag", "resposta")
     g.add_edge("resposta", END)
-    return g.compile()
+    return g.compile(checkpointer=checkpointer)
