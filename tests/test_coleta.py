@@ -3,6 +3,7 @@
 
 from amparo.coleta import (
     PERGUNTAS,
+    deduplicar_renda,
     filtrar_atualizacoes_vazias,
     filtrar_grupo_familiar,
     fundir_caso_parcial,
@@ -93,10 +94,40 @@ def test_fundir_nao_apaga_campos_nao_mencionados():
     assert fundido["membros_coletado"] is True
 
 
-def test_fundir_substitui_lista_completa_de_outros_membros():
+def test_fundir_aceita_lista_maior_de_outros_membros():
     atual = {"outros_membros": [{"idade_anos": 10}]}
     novo = {"outros_membros": [{"idade_anos": 10}, {"idade_anos": 40}]}
     assert fundir_caso_parcial(atual, novo)["outros_membros"] == novo["outros_membros"]
+
+
+def test_fundir_outros_membros_mescla_por_posicao_sem_perder_campo_antigo():
+    """Regressão: o LLM às vezes restabelece 'outros_membros' só com o campo
+    novo (ex.: renda), perdendo parentesco/idade já coletados antes — a
+    fusão por posição preserva o que não foi restabelecido."""
+    atual = {
+        "outros_membros": [
+            {"idade_anos": 65, "parentesco": "irmao", "solteiro": False}
+        ]
+    }
+    novo = {"outros_membros": [{"renda_trabalho": 1621}]}
+    fundido = fundir_caso_parcial(atual, novo)
+    assert fundido["outros_membros"] == [
+        {"idade_anos": 65, "parentesco": "irmao", "solteiro": False, "renda_trabalho": 1621}
+    ]
+
+
+def test_fundir_outros_membros_lista_vazia_explicita_zera_tudo():
+    """"mora só" (lista vazia explícita) continua zerando, não é afetado
+    pela fusão por posição."""
+    atual = {"outros_membros": [{"idade_anos": 40}]}
+    novo = {"outros_membros": []}
+    assert fundir_caso_parcial(atual, novo)["outros_membros"] == []
+
+
+def test_fundir_outros_membros_lista_menor_reflete_remocao():
+    atual = {"outros_membros": [{"idade_anos": 10}, {"idade_anos": 40}]}
+    novo = {"outros_membros": [{"idade_anos": 10}]}
+    assert fundir_caso_parcial(atual, novo)["outros_membros"] == [{"idade_anos": 10}]
 
 
 # --- marcar_etapas_respondidas: deriva os marcadores da presença explícita ---
@@ -288,3 +319,34 @@ def test_estado_civil_desconhecido_nao_exclui():
     exclusão só quando se sabe explicitamente que é casado(a)."""
     membros = [{"idade_anos": 40, "parentesco": "filho_enteado"}]
     assert filtrar_grupo_familiar(membros) == membros
+
+
+# --- deduplicar_renda: regressão real observada no eval_agente -------------
+# O LLM às vezes repete o mesmo valor de aposentadoria/pensão em
+# "renda_trabalho" E em "beneficios_previdenciarios" da mesma pessoa ao
+# restabelecer "outros_membros" — isso contaria o benefício em dobro e
+# bloquearia a exclusão de 1 SM do idoso/deficiente (que só vale para
+# beneficios_previdenciarios).
+
+def test_remove_renda_trabalho_duplicada_no_beneficio_do_requerente():
+    caso = {"requerente": {"renda_trabalho": 1621, "beneficios_previdenciarios": [1621]}}
+    assert deduplicar_renda(caso)["requerente"]["renda_trabalho"] == 0
+
+
+def test_remove_renda_trabalho_duplicada_em_outro_membro():
+    caso = {
+        "outros_membros": [
+            {"idade_anos": 65, "renda_trabalho": 1621, "beneficios_previdenciarios": [1621]}
+        ]
+    }
+    assert deduplicar_renda(caso)["outros_membros"][0]["renda_trabalho"] == 0
+
+
+def test_nao_remove_renda_trabalho_que_nao_e_duplicada():
+    caso = {"requerente": {"renda_trabalho": 500, "beneficios_previdenciarios": [1621]}}
+    assert deduplicar_renda(caso)["requerente"]["renda_trabalho"] == 500
+
+
+def test_deduplicar_renda_sem_beneficios_nao_altera_nada():
+    caso = {"requerente": {"renda_trabalho": 500}}
+    assert deduplicar_renda(caso) == caso

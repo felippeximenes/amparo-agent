@@ -42,6 +42,7 @@ from langgraph.graph import END, START, StateGraph
 from amparo import rag
 from amparo.coleta import (
     PERGUNTAS,
+    deduplicar_renda,
     filtrar_atualizacoes_vazias,
     fundir_caso_parcial,
     inferir_rota_por_idade,
@@ -230,6 +231,10 @@ def construir_grafo(llm: LLM | None = None, checkpointer=None):
             # perguntada — senão é descartada e a pergunta se repete.
             atualizacoes = filtrar_atualizacoes_vazias(atualizacoes, estado.get("aguardando"))
             caso_parcial = fundir_caso_parcial(caso_parcial, atualizacoes)
+            # Corrige um erro real do LLM: repetir a mesma aposentadoria/
+            # pensão em renda_trabalho E em beneficios_previdenciarios, o
+            # que bloquearia a exclusão de até 1 SM do idoso/deficiente.
+            caso_parcial = deduplicar_renda(caso_parcial)
         # Nunca confia em marcador de etapa vindo do LLM — deriva da presença
         # explícita dos dados (regra 1 do CLAUDE.md: elegibilidade é código,
         # não decisão do modelo). Idem para a rota: se já se sabe a idade

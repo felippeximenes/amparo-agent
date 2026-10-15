@@ -168,20 +168,38 @@ possíveis, no MESMO formato do que já foi coletado:
   "impedimento_min_2_anos": true | false,
   "deducoes_saude": ["medicamentos","consultas","fraldas","alimentacao_especial","centro_dia"]
 }
+"requerente" é SEMPRE a pessoa cujo direito ao BPC está sendo verificado —
+mesmo que quem está escrevendo seja outra pessoa (filho, nora, cuidador...)
+falando por ela. Se alguém escreve "minha mãe tem 70 anos, ela tem direito?",
+a idade de 70 anos é da MÃE e vai em "requerente.idade_anos" — a mãe NÃO é um
+item de "outros_membros", ela é a própria requerente. "outros_membros" é só
+quem MORA COM a requerente (e o "parentesco" é a relação de cada um com ELA,
+não com quem está digitando).
 Em "outros_membros", preencha "parentesco" sempre que a fala der a relação com o
 requerente. "solteiro" só importa para "filho_enteado" e "irmao" (só esses dois ficam
 de fora do grupo familiar se forem casados) — preencha true/false quando a pessoa
 disser o estado civil (ex.: "meu filho casado" → solteiro: false; "minha irmã
 solteira" → solteiro: true); se não for dito, não inclua o campo. Para cônjuge, pais
 ou tutelados, "solteiro" não é necessário. "outros_membros" e "deducoes_saude" são a
-lista COMPLETA (não um item novo). Quando a
+lista COMPLETA (não um item novo) — mas só inclua "outros_membros" quando a ÚLTIMA
+fala disser algo NOVO sobre quem mora na casa; se a última fala é sobre a renda ou
+saúde da própria requerente, NÃO repita "outros_membros" (evita reescrever um campo
+de um membro já conhecido com um valor incompleto ou duplicado). NUNCA mova um valor
+já coletado de um campo pra outro (ex.: de "renda_trabalho" pra
+"beneficios_previdenciarios") numa fala que não fala sobre esse valor — se a ÚLTIMA
+fala não é sobre a renda de alguém, não toque nos campos de renda já coletados dessa
+pessoa. Quando a
 pessoa disser que mora só / ninguém mais mora na casa, devolva "outros_membros": []
 — lista vazia, EXPLÍCITA, não omita o campo. Quando disser que não tem gastos de
 saúde, devolva "deducoes_saude": [] — vazia, explícita. Quando disser que não tem
 renda (da pessoa ou de algum membro da casa), devolva "renda_trabalho": 0
 EXPLICITAMENTE para esse membro — não omita o campo. "renda_trabalho" soma salário,
 trabalho informal, pró-labore e Bolsa Família. "beneficios_previdenciarios" são
-aposentadorias/pensões/BPC. "renda_excluida" é estágio, aprendizagem, indenização de
+aposentadorias/pensões/BPC — se a fala disser "aposentado(a)", "pensionista" ou "recebe
+BPC", o valor vai em "beneficios_previdenciarios", NUNCA em "renda_trabalho" — NUNCA
+coloque o mesmo valor nos dois campos da mesma pessoa, são tratados diferente no
+cálculo (aposentadoria/pensão/BPC de até 1 salário mínimo some da
+renda se o membro for idoso ou com deficiência). "renda_excluida" é estágio, aprendizagem, indenização de
 barragem, auxílio-inclusão. Se a última fala não trouxer nada novo sobre um campo, não
 o inclua no JSON. NÃO invente valores, e NÃO devolva nenhum campo além dos listados
 acima. Responda só o JSON."""

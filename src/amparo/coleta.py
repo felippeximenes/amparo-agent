@@ -184,16 +184,58 @@ def filtrar_atualizacoes_vazias(atualizacoes: Mapping, aguardando: str | None) -
     return filtrado
 
 
+def _fundir_lista_membros(atual: list, novo: list) -> list[dict]:
+    """Mescla `outros_membros` por posição: cada item novo é mesclado campo a
+    campo com o item da mesma posição já coletado (não substituído). Isso
+    protege contra o LLM "restabelecer" a lista completa, como instruído,
+    mas só com o campo que mudou nesta fala, perdendo parentesco/idade já
+    sabidos de um membro. Uma lista menor reflete remoção (ex.: a pessoa
+    corrige quem mora na casa); uma vazia ("mora só") zera tudo."""
+    fundido = []
+    for i, membro_novo in enumerate(novo):
+        membro_atual = atual[i] if i < len(atual) else {}
+        fundido.append({**membro_atual, **membro_novo})
+    return fundido
+
+
+def _dedup_membro(membro: Mapping) -> dict:
+    renda_trabalho = membro.get("renda_trabalho")
+    beneficios = membro.get("beneficios_previdenciarios") or []
+    if renda_trabalho and renda_trabalho in beneficios:
+        return {**membro, "renda_trabalho": 0}
+    return dict(membro)
+
+
+def deduplicar_renda(caso_parcial: Mapping) -> dict:
+    """Corrige um erro real observado do LLM: ao restabelecer um membro,
+    repetir o mesmo valor de aposentadoria/pensão em "renda_trabalho" E em
+    "beneficios_previdenciarios" — contaria o benefício em dobro e, pior,
+    bloquearia a exclusão de até 1 SM do idoso/deficiente (que só vale para
+    beneficios_previdenciarios). Zera "renda_trabalho" quando o mesmo valor
+    já está em "beneficios_previdenciarios" da mesma pessoa."""
+    resultado = dict(caso_parcial)
+    if "requerente" in resultado:
+        resultado["requerente"] = _dedup_membro(resultado["requerente"])
+    if "outros_membros" in resultado:
+        resultado["outros_membros"] = [_dedup_membro(m) for m in resultado["outros_membros"]]
+    return resultado
+
+
 def fundir_caso_parcial(atual: Mapping, novo: Mapping) -> dict:
     """Funde os campos NOVOS (extraídos pelo LLM da última fala) no que já
-    foi coletado. `requerente` é mesclado campo a campo; os demais campos —
-    incluindo listas como `outros_membros` e `deducoes_saude` — são
-    substituídos: o LLM sempre devolve o valor completo do campo, não um
-    delta dele."""
+    foi coletado. `requerente` e cada item de `outros_membros` são
+    mesclados campo a campo (nunca substituídos de uma vez) — o LLM pode
+    restabelecer um campo só parcialmente ao confirmar outro. Os demais
+    campos (ex.: `deducoes_saude`) são substituídos: o LLM sempre devolve a
+    lista completa deles, não um delta."""
     fundido = dict(atual)
     for chave, valor in novo.items():
         if chave == "requerente" and isinstance(valor, Mapping):
             fundido["requerente"] = {**fundido.get("requerente", {}), **valor}
+        elif chave == "outros_membros" and isinstance(valor, list):
+            fundido["outros_membros"] = _fundir_lista_membros(
+                fundido.get("outros_membros", []), valor
+            )
         else:
             fundido[chave] = valor
     return fundido
