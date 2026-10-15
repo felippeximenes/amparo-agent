@@ -10,30 +10,36 @@ Legenda: `[x]` feito · `[~]` parcial · `[ ]` a fazer
 
 ## Onde estamos (revisão de 15/10/2026)
 
-Último commit: 02/09/2026 (`fc581e1`). **46 testes passando.**
+Último commit: 15/10/2026. **65 testes passando.**
 
 | Fase | Situação |
 |---|---|
 | 0 — Fundação | ✅ concluída |
 | 1 — Curadoria + RAG | ✅ concluída (recall@5 = 85%) — 1 fonte pendente |
-| 2 — Núcleo do agente | 🟡 ~60% — LLM plugado, falta conversa multi-turno e memória |
+| 2 — Núcleo do agente | 🟡 ~75% — conversa multi-turno pronta, falta memória de sessão |
 | 3 — API HTTP | ⬜ não iniciada |
 | 4 — Canal WhatsApp | ⬜ não iniciada |
 | 5 — Demo web | ⬜ não iniciada |
 | 6 — Qualidade, LGPD e deploy | ⬜ não iniciada |
 | 7 — Portfólio | ⬜ não iniciada |
 
-**O que já funciona hoje:** pergunta única pelo CLI (`scripts/chat.py`) →
-intenção por palavra-chave → RAG híbrido (denso + BM25 + RRF) **ou** motor de
-elegibilidade determinístico → resposta com fonte + disclaimer. O LLM (Ollama
-ou OpenAI, via endpoint compatível) já extrai o `Caso` da fala e redige a
-resposta do RAG.
+**O que já funciona hoje:** conversa multi-turno pelo CLI (`scripts/chat.py`,
+estado em memória no processo) → intenção por palavra-chave → RAG híbrido
+(denso + BM25 + RRF) **ou** motor de elegibilidade determinístico, coletando
+o `Caso` aos poucos (um dado por vez) → resposta com fonte + disclaimer. O LLM
+(Ollama ou OpenAI, via endpoint compatível) extrai só os campos NOVOS de cada
+fala e redige a resposta do RAG. Um desvio de assunto no meio da coleta
+("e quais documentos?") é respondido pelo RAG sem perder o que já foi
+coletado.
 
 **Principais lacunas encontradas na revisão:**
 
-1. **Cada mensagem é independente.** O grafo não guarda histórico: para checar
-   elegibilidade, a pessoa precisa contar idade, quem mora na casa e a renda de
-   todos *numa única mensagem*. É o bloqueio nº 1 para o WhatsApp.
+1. ~~**Cada mensagem é independente.**~~ Resolvido em 15/10/2026: conversa
+   multi-turno (`src/amparo/coleta.py` + `Estado.caso_parcial`/`aguardando`
+   em `agente.py`). Ressalva: a extração por LLM às vezes infere um passo
+   (ex.: "mora só") como coletado antes de perguntar explicitamente — a
+   avaliação final continua correta (motor determinístico), mas o prompt de
+   extração pode ser afinado depois.
 2. ~~**Salário mínimo desatualizado.**~~ Resolvido em 15/10/2026:
    `PARAMETROS_2026` (SM R$ 1.621, limite R$ 405,25) + `parametros_vigentes(data)`.
    Anexo I (deduções de saúde) conferido — sem reajuste na Portaria 34/2025.
@@ -71,11 +77,11 @@ Já feito:
 - [x] Citação obrigatória de fonte + disclaimer em toda resposta
 - [x] LLM plugado — `src/amparo/llm.py` (`ChatLLM`, Ollama ou OpenAI): extrai o `Caso` da fala (JSON) e redige a resposta do RAG; modo template quando não há LLM; contador de tokens/custo
 - [x] **Atualizar parâmetros para 2026** — `PARAMETROS_2026` (SM R$ 1.621) e `parametros_vigentes(data)` escolhe o parâmetro pela data; `avaliar()` usa o vigente hoje por padrão. Testes de borda em R$ 405,25. Anexo I conferido (sem reajuste).
-- [~] Fluxo completo via CLI — funciona para pergunta única
+- [x] **Conversa multi-turno** — `src/amparo/coleta.py` (`PERGUNTAS`, `proximo_dado_faltante`, `fundir_caso_parcial`, código puro e testado) + `Estado.caso_parcial`/`aguardando`/`opcoes` em `agente.py`. O agente pergunta *um dado por vez* (rota → idade/impedimento → quem mora na casa → renda de cada um → gastos de saúde) e só chama `avaliar()` quando o `Caso` está completo; atalho se a primeira fala já tiver tudo; desvio de assunto no meio responde pelo RAG sem perder o `caso_parcial`. `scripts/chat.py` carrega o `Estado` entre turnos (em memória no processo — persistência é o P3). `opcoes` de cada pergunta já no formato de botões para o WhatsApp.
+- [~] Fluxo completo via CLI — funciona multi-turno em memória no processo (sem persistir entre execuções — isso é o P3)
 
 A fazer (nesta ordem):
 
-- [ ] **Conversa multi-turno** — o `Caso` passa a ser montado aos poucos: o estado guarda o histórico e os dados já coletados; o agente pergunta *um dado por vez* o que falta (rota → idade → quem mora na casa → renda de cada um → gastos de saúde) e só chama `avaliar()` quando o `Caso` está completo. Ideal para botões do WhatsApp na Fase 4.
 - [ ] **Memória de sessão** — checkpointer do LangGraph com `thread_id` por conversa. Dev: `MemorySaver`/SQLite; produção: Postgres (Neon). Expiração automática (ex.: 24 h sem mensagem → apaga o estado) — atende à regra de LGPD do `CLAUDE.md`.
 - [ ] **Intenção via LLM** com saída estruturada, mantendo a palavra-chave como fallback quando o LLM está fora
 - [ ] **`fallback_node`** — saudação, fora de escopo ("e o auxílio-doença?"), mensagem incompreensível → resposta educada + encaminhamento (INSS 135 / Defensoria)

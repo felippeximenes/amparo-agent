@@ -24,6 +24,7 @@ def main() -> None:
     llm = criar_llm()
     grafo = construir_grafo(llm)
     print(BANNER)
+    estado: dict = {}  # carrega mensagens/caso_parcial/aguardando entre turnos (memória em processo; persistência é o P3)
     try:
         while True:
             try:
@@ -33,7 +34,7 @@ def main() -> None:
                 break
             if pergunta.lower() in {"sair", "exit", "quit", ""}:
                 break
-            estado = grafo.invoke({"pergunta": pergunta})
+            estado = grafo.invoke({**estado, "pergunta": pergunta})
             print("\n" + estado["resposta"] + "\n")
     finally:
         if hasattr(llm, "resumo_uso") and getattr(llm, "tokens_entrada", 0):

@@ -6,8 +6,9 @@ endpoint compatível com a API da OpenAI — o padrão é o Ollama local
 `llm_api_key` e `llm_model`.
 
 Sem LLM configurado (ou Ollama fora do ar), `criar_llm()` devolve `None` e o
-grafo roda em modo template: elegibilidade sem `Caso` fica `INDETERMINADO` e as
-respostas do RAG são compostas por template.
+grafo roda em modo template: a coleta de elegibilidade fica `INDETERMINADO` no
+primeiro dado que falta (nada é extraído da fala) e as respostas do RAG são
+compostas por template.
 """
 
 from __future__ import annotations
@@ -25,9 +26,11 @@ from amparo.rules.elegibilidade import (
 
 
 class LLM(Protocol):
-    def extrair_caso(self, texto: str) -> Caso | None:
-        """Extrai um `Caso` de elegibilidade da fala do usuário; `None` se
-        faltam dados essenciais (rota, idade na rota idade)."""
+    def extrair_atualizacoes(self, mensagens: list[dict], caso_parcial: dict) -> dict:
+        """A partir da conversa e do que já foi coletado (`caso_parcial`, no
+        formato de `caso_de_dict`), devolve só os campos NOVOS entendidos na
+        última fala do usuário. Não decide o que falta — isso é
+        `coleta.proximo_dado_faltante`, código puro."""
         ...
 
     def responder(self, pergunta: str, trechos: list[dict]) -> str:
@@ -88,6 +91,18 @@ def caso_de_dict(d: dict) -> Caso | None:
     )
 
 
+def interpretar_atualizacoes(saida: str) -> dict:
+    """Parsing puro da resposta do modelo para `extrair_atualizacoes`. JSON
+    inválido ou que não é um objeto devolve `{}` (nenhuma atualização)."""
+    if not saida:
+        return {}
+    try:
+        dados = json.loads(saida)
+    except json.JSONDecodeError:
+        return {}
+    return dados if isinstance(dados, dict) else {}
+
+
 # --- adaptador para endpoint compatível com OpenAI --------------------------------
 
 _SEM_RESPOSTA = (
@@ -95,23 +110,30 @@ _SEM_RESPOSTA = (
     "Procure o INSS (telefone 135 ou pelo Meu INSS) ou a Defensoria Pública."
 )
 
-_SYS_EXTRAIR = """Você extrai dados para uma verificação de elegibilidade ao BPC/LOAS.
-Leia o texto do usuário e devolva SOMENTE um JSON com esta forma:
+_SYS_EXTRAIR_ATUALIZACOES = """Você ajuda a preencher, PASSO A PASSO, os dados para
+verificar elegibilidade ao BPC/LOAS. Você recebe o que já foi coletado (JSON) e a
+conversa até agora (amparo pergunta, a pessoa responde). Devolva SOMENTE um JSON com
+os campos NOVOS que a ÚLTIMA fala da pessoa (a última linha da conversa) trouxe — não
+repita o que já estava coletado, não invente o que a pessoa não disse. Campos
+possíveis, no MESMO formato do que já foi coletado:
 {
-  "rota": "idade" | "deficiencia" | null,
-  "requerente": {"idade_anos": int|null, "com_deficiencia": bool,
-                 "renda_trabalho": number, "beneficios_previdenciarios": [number],
-                 "renda_excluida": number},
+  "rota": "idade" | "deficiencia",
+  "requerente": {"idade_anos": int, "com_deficiencia": bool, "renda_trabalho": number,
+                 "beneficios_previdenciarios": [number], "renda_excluida": number},
   "outros_membros": [ {mesma forma do requerente} ],
-  "impedimento_min_2_anos": true | false | null,
-  "deducoes_saude": ["medicamentos","consultas","fraldas","alimentacao_especial","centro_dia"]
+  "impedimento_min_2_anos": true | false,
+  "deducoes_saude": ["medicamentos","consultas","fraldas","alimentacao_especial","centro_dia"],
+  "membros_coletado": true,
+  "renda_coletada": true,
+  "saude_coletada": true
 }
-Regras: "rota" é "idade" se a pessoa tem ou está perto de 65 anos; "deficiencia" se
-menciona deficiência/impedimento. "renda_trabalho" soma salário, trabalho informal,
-pró-labore e Bolsa Família. "beneficios_previdenciarios" são aposentadorias/pensões/BPC.
-"renda_excluida" é estágio, aprendizagem, indenização de barragem, auxílio-inclusão.
-Se um dado não foi informado, use null (ou 0 para valores, [] para listas).
-NÃO invente valores. Responda só o JSON."""
+"outros_membros" e "deducoes_saude" são a lista COMPLETA (não um item novo). Marque
+"membros_coletado"/"renda_coletada"/"saude_coletada" como true quando a pessoa
+respondeu aquela pergunta, mesmo que a resposta seja "não" ou "nenhuma". "renda_trabalho"
+soma salário, trabalho informal, pró-labore e Bolsa Família. "beneficios_previdenciarios"
+são aposentadorias/pensões/BPC. "renda_excluida" é estágio, aprendizagem, indenização de
+barragem, auxílio-inclusão. Se a última fala não trouxer nada novo sobre um campo, não o
+inclua no JSON. NÃO invente valores. Responda só o JSON."""
 
 _SYS_RESPONDER = """Você é o Amparo, uma ferramenta de orientação informativa e independente.
 NÃO é o INSS nem o governo. Responda à pergunta APENAS com base nos trechos oficiais
@@ -175,14 +197,12 @@ class ChatLLM:
             linha += f"  |  custo estimado da sessão: US$ {custo:.4f}"
         return linha
 
-    def extrair_caso(self, texto: str) -> Caso | None:
-        saida = self._chat(_SYS_EXTRAIR, texto, json_mode=True)
-        if not saida:
-            return None
-        try:
-            return caso_de_dict(json.loads(saida))
-        except (json.JSONDecodeError, TypeError):
-            return None
+    def extrair_atualizacoes(self, mensagens: list[dict], caso_parcial: dict) -> dict:
+        transcricao = "\n".join(f"{m['role']}: {m['texto']}" for m in mensagens)
+        contexto = json.dumps(caso_parcial, ensure_ascii=False)
+        user = f"Já coletado até agora: {contexto}\n\nConversa:\n{transcricao}"
+        saida = self._chat(_SYS_EXTRAIR_ATUALIZACOES, user, json_mode=True)
+        return interpretar_atualizacoes(saida)
 
     def responder(self, pergunta: str, trechos: list[dict]) -> str:
         if not trechos:

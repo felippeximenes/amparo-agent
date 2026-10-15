@@ -1,11 +1,18 @@
 """Grafo do agente Amparo (LangGraph).
 
-`construir_grafo(llm)` monta `intake → {elegibilidade | rag} → resposta`.
+`construir_grafo(llm)` monta `intake → {elegibilidade | rag} → resposta`. O
+`Estado` é passado inteiro entre chamadas de `grafo.invoke()` (ver
+`scripts/chat.py`) — é assim que a conversa segue de um turno para o outro.
 
-- `intake` classifica a intenção por palavra-chave.
-- `elegibilidade` usa `llm.extrair_caso` para montar um `Caso` a partir da fala;
-  sem `Caso` (ou sem LLM) devolve `INDETERMINADO` pedindo os dados.
-- `rag` faz a busca híbrida.
+- `intake` classifica a intenção por palavra-chave; em meio a uma coleta
+  (`aguardando` setado), qualquer fala que não seja um desvio para o
+  checklist continua em elegibilidade.
+- `elegibilidade` usa `llm.extrair_atualizacoes` + `coleta.fundir_caso_parcial`
+  para ir montando o `caso_parcial` aos poucos; `coleta.proximo_dado_faltante`
+  (código puro) decide se falta pergunta ou se já pode chamar `avaliar()`.
+  Sem LLM, cada turno fica `INDETERMINADO` no primeiro dado que falta.
+- `rag` faz a busca híbrida; um desvio no meio da coleta passa por aqui sem
+  tocar no `caso_parcial`, que a conversa retoma depois.
 - `resposta` compõe o texto: com LLM, `llm.responder` redige sobre os trechos;
   sem LLM, template. A parte de elegibilidade é sempre template (mantém os
   números e o veredito exatos). Disclaimer em toda resposta.
@@ -21,8 +28,9 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from amparo import rag
+from amparo.coleta import PERGUNTAS, fundir_caso_parcial, proximo_dado_faltante
 from amparo.disclaimer import DISCLAIMER
-from amparo.llm import LLM
+from amparo.llm import LLM, caso_de_dict
 from amparo.rules.elegibilidade import Avaliacao, Caso, Resultado, avaliar
 
 
@@ -34,8 +42,12 @@ class Intencao(str, Enum):
 
 class Estado(TypedDict, total=False):
     pergunta: str
+    mensagens: list[dict]            # histórico [{"role": "usuario"|"amparo", "texto": str}]
+    caso_parcial: dict               # campos de elegibilidade já coletados, passo a passo
+    aguardando: str | None           # qual passo de `coleta.PERGUNTAS` foi perguntado por último
+    opcoes: list[str] | None         # opções curtas da pergunta pendente (futuros botões)
     intencao: Intencao
-    caso: Caso | None          # se já vier montado, o LLM não é chamado
+    caso: Caso | None                # Caso completo, só quando a coleta termina
     avaliacao: Avaliacao | None
     trechos: list[dict]
     resposta: str
@@ -62,13 +74,13 @@ def classificar_intencao(pergunta: str) -> Intencao:
     return Intencao.DUVIDA
 
 
-PEDIDO_DE_DADOS = Avaliacao(
-    Resultado.INDETERMINADO,
-    "Para verificar, preciso saber: se a análise é por idade ou por deficiência, "
-    "a idade do requerente, quem mora na mesma casa (cônjuge, pais, filhos e "
-    "irmãos solteiros) e a renda mensal de cada um.",
-    fontes=("LOAS (Lei 8.742/1993) art. 20",),
-)
+_FONTE_COLETA = ("LOAS (Lei 8.742/1993) art. 20",)
+
+
+def _avaliacao_pendente(dado_faltante: str) -> Avaliacao:
+    return Avaliacao(
+        Resultado.INDETERMINADO, PERGUNTAS[dado_faltante]["texto"], fontes=_FONTE_COLETA
+    )
 
 
 def _linha_veredito(a: Avaliacao) -> str:
@@ -87,6 +99,7 @@ def compor_resposta(
     avaliacao: Avaliacao | None = None,
     trechos: list[dict] | tuple = (),
     texto_rag: str | None = None,
+    opcoes: list[str] | None = None,
 ) -> str:
     partes: list[str] = []
 
@@ -97,6 +110,8 @@ def compor_resposta(
                 f"Renda por pessoa considerada: R$ {avaliacao.renda_per_capita:.2f}. "
                 f"Limite (1/4 do salário mínimo): R$ {avaliacao.limite_renda:.2f}."
             )
+        if opcoes:
+            partes.append("Responda: " + " ou ".join(opcoes) + ".")
         if avaliacao.fontes:
             partes.append("Base: " + "; ".join(avaliacao.fontes) + ".")
     elif texto_rag:  # trilha do RAG com LLM
@@ -118,13 +133,53 @@ def compor_resposta(
 
 def construir_grafo(llm: LLM | None = None):
     def no_intake(estado: Estado) -> dict:
-        return {"intencao": classificar_intencao(estado.get("pergunta", ""))}
+        pergunta = estado.get("pergunta", "")
+        mensagens = [*estado.get("mensagens", []), {"role": "usuario", "texto": pergunta}]
+        intencao_da_fala = classificar_intencao(pergunta)
+        # Em meio à coleta, qualquer fala que não seja um desvio claro para o
+        # checklist continua respondendo a pergunta pendente (ex.: "70 anos",
+        # "moro só" não batem com nenhuma palavra-chave e cairiam em DUVIDA).
+        if estado.get("aguardando") and intencao_da_fala is not Intencao.CHECKLIST:
+            intencao = Intencao.ELEGIBILIDADE
+        else:
+            intencao = intencao_da_fala
+        return {"mensagens": mensagens, "intencao": intencao}
 
     def no_elegibilidade(estado: Estado) -> dict:
-        caso = estado.get("caso")
-        if caso is None and llm is not None:
-            caso = llm.extrair_caso(estado.get("pergunta", ""))
-        return {"avaliacao": avaliar(caso) if caso is not None else PEDIDO_DE_DADOS}
+        caso_parcial = dict(estado.get("caso_parcial") or {})
+        pergunta = estado.get("pergunta", "")
+        if llm is not None and pergunta:
+            atualizacoes = llm.extrair_atualizacoes(
+                estado.get("mensagens", []), caso_parcial
+            )
+            caso_parcial = fundir_caso_parcial(caso_parcial, atualizacoes)
+
+        dado_faltante = proximo_dado_faltante(caso_parcial)
+        if dado_faltante is not None:
+            return {
+                "caso_parcial": caso_parcial,
+                "aguardando": dado_faltante,
+                "opcoes": PERGUNTAS[dado_faltante]["opcoes"],
+                "avaliacao": _avaliacao_pendente(dado_faltante),
+                "caso": None,
+            }
+
+        caso = caso_de_dict(caso_parcial)
+        if caso is None:  # dados coletados ficaram inconsistentes — recomeça pela rota
+            return {
+                "caso_parcial": caso_parcial,
+                "aguardando": "rota",
+                "opcoes": PERGUNTAS["rota"]["opcoes"],
+                "avaliacao": _avaliacao_pendente("rota"),
+                "caso": None,
+            }
+        return {
+            "caso_parcial": caso_parcial,
+            "aguardando": None,
+            "opcoes": None,
+            "caso": caso,
+            "avaliacao": avaliar(caso),
+        }
 
     def no_rag(estado: Estado) -> dict:
         pergunta = estado.get("pergunta", "")
@@ -132,17 +187,21 @@ def construir_grafo(llm: LLM | None = None):
         return {"trechos": trechos}
 
     def no_resposta(estado: Estado) -> dict:
+        intencao = estado.get("intencao")
+        em_elegibilidade = intencao is Intencao.ELEGIBILIDADE
+        avaliacao = estado.get("avaliacao") if em_elegibilidade else None
+        opcoes = estado.get("opcoes") if em_elegibilidade else None
+
         trechos = estado.get("trechos") or []
         texto_rag = None
         if llm is not None and trechos:
             texto_rag = llm.responder(estado.get("pergunta", ""), trechos) or None
-        return {
-            "resposta": compor_resposta(
-                avaliacao=estado.get("avaliacao"),
-                trechos=trechos,
-                texto_rag=texto_rag,
-            )
-        }
+
+        resposta = compor_resposta(
+            avaliacao=avaliacao, trechos=trechos, texto_rag=texto_rag, opcoes=opcoes
+        )
+        mensagens = [*estado.get("mensagens", []), {"role": "amparo", "texto": resposta}]
+        return {"resposta": resposta, "mensagens": mensagens}
 
     def _rota(estado: Estado) -> str:
         return (

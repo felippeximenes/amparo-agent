@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from amparo.llm import caso_de_dict
+from amparo.llm import caso_de_dict, interpretar_atualizacoes
 from amparo.rules.elegibilidade import CategoriaDeducao, Resultado, Rota, avaliar
 
 
@@ -56,3 +56,21 @@ def test_beneficios_e_deducoes_desconhecidas_sao_tratados():
     assert caso.deducoes_saude == frozenset({CategoriaDeducao.FRALDAS})
     # e o Caso montado roda no motor
     assert avaliar(caso).resultado in set(Resultado)
+
+
+# --- interpretar_atualizacoes (parsing puro da saída do modelo) --------------
+
+def test_interpretar_atualizacoes_de_json_valido():
+    assert interpretar_atualizacoes('{"rota": "idade"}') == {"rota": "idade"}
+
+
+def test_interpretar_atualizacoes_vazia():
+    assert interpretar_atualizacoes("") == {}
+
+
+def test_interpretar_atualizacoes_de_json_invalido():
+    assert interpretar_atualizacoes("não é json") == {}
+
+
+def test_interpretar_atualizacoes_de_lista_json_e_ignorada():
+    assert interpretar_atualizacoes('["idade"]') == {}
