@@ -1,12 +1,17 @@
 id: atalho-primeira-fala-completa-atende
 descricao: >
-  Primeira fala já traz dado NÃO vazio para toda etapa (esposa existe, renda
-  dela > 0, gasto de saúde real) — não depende de confirmação vazia, então
-  pode resolver rápido. Mede quantas perguntas o modelo ainda faz.
+  Corrigido (ver RESUMO FINAL): a primeira fala nunca diz a renda do PRÓPRIO
+  requerente (só a da esposa) — "renda" fica pendente não por ser um valor
+  vazio dito antes da hora, mas porque ele nunca respondeu sobre a própria
+  renda. A 2ª fala responde exatamente a essa pergunta pendente. Já a
+  "esposa existe" e "temos gasto com remédio" são dados NÃO vazios (pessoa
+  real, renda > 0, gasto real) e por isso são aproveitados de cara, sem
+  precisar da etapa correspondente estar em aguardando.
 falas:
   - >-
     Tenho 70 anos, moro com minha esposa que ganha 300 de pensão, e temos
     gasto com remédio. Tenho direito ao BPC?
+  - "eu não tenho renda"
 esperado:
   tipo: elegibilidade
   resultado: atende
