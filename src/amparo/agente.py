@@ -30,6 +30,7 @@ from langgraph.graph import END, START, StateGraph
 from amparo import rag
 from amparo.coleta import (
     PERGUNTAS,
+    filtrar_atualizacoes_vazias,
     fundir_caso_parcial,
     marcar_etapas_respondidas,
     proximo_dado_faltante,
@@ -157,6 +158,10 @@ def construir_grafo(llm: LLM | None = None):
             atualizacoes = llm.extrair_atualizacoes(
                 estado.get("mensagens", []), caso_parcial
             )
+            # Uma confirmação vazia (outros_membros=[], renda zero,
+            # deducoes_saude=[]) só vale se responde à etapa que foi de fato
+            # perguntada — senão é descartada e a pergunta se repete.
+            atualizacoes = filtrar_atualizacoes_vazias(atualizacoes, estado.get("aguardando"))
             caso_parcial = fundir_caso_parcial(caso_parcial, atualizacoes)
         # Nunca confia em marcador de etapa vindo do LLM — deriva da presença
         # explícita dos dados (regra 1 do CLAUDE.md: elegibilidade é código,

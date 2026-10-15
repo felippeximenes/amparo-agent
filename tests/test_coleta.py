@@ -3,6 +3,7 @@
 
 from amparo.coleta import (
     PERGUNTAS,
+    filtrar_atualizacoes_vazias,
     fundir_caso_parcial,
     marcar_etapas_respondidas,
     proximo_dado_faltante,
@@ -151,3 +152,65 @@ def test_marcador_vindo_do_llm_e_sobrescrito_pela_checagem_real():
     anterior inconsistente) é sobrescrito pela checagem real dos dados."""
     caso = {"membros_coletado": True}
     assert marcar_etapas_respondidas(caso)["membros_coletado"] is False
+
+
+# --- filtrar_atualizacoes_vazias: confirmação vazia exige a pergunta certa ---
+# Resposta vazia (outros_membros=[], renda zero, deducoes_saude=[]) só vale
+# quando responde à pergunta que foi de fato feita (`aguardando`); fora disso
+# é descartada (a pergunta é repetida). Valor NÃO vazio vale a qualquer hora.
+
+def test_outros_membros_vazio_e_descartado_fora_da_etapa_membros():
+    atualizacoes = {"outros_membros": []}
+    assert filtrar_atualizacoes_vazias(atualizacoes, "idade") == {}
+
+
+def test_outros_membros_vazio_e_aceito_na_etapa_membros():
+    atualizacoes = {"outros_membros": []}
+    assert filtrar_atualizacoes_vazias(atualizacoes, "membros") == {"outros_membros": []}
+
+
+def test_outros_membros_nao_vazio_e_aceito_a_qualquer_hora():
+    atualizacoes = {"outros_membros": [{"idade_anos": 40, "renda_trabalho": 2000}]}
+    assert filtrar_atualizacoes_vazias(atualizacoes, "rota") == atualizacoes
+
+
+def test_deducoes_saude_vazia_e_descartada_fora_da_etapa_saude():
+    assert filtrar_atualizacoes_vazias({"deducoes_saude": []}, "renda") == {}
+
+
+def test_deducoes_saude_vazia_e_aceita_na_etapa_saude():
+    atualizacoes = {"deducoes_saude": []}
+    assert filtrar_atualizacoes_vazias(atualizacoes, "saude") == atualizacoes
+
+
+def test_deducoes_saude_nao_vazia_e_aceita_a_qualquer_hora():
+    atualizacoes = {"deducoes_saude": ["fraldas"]}
+    assert filtrar_atualizacoes_vazias(atualizacoes, "rota") == atualizacoes
+
+
+def test_renda_zero_do_requerente_e_descartada_fora_da_etapa_renda():
+    atualizacoes = {"requerente": {"idade_anos": 70, "renda_trabalho": 0}}
+    filtrado = filtrar_atualizacoes_vazias(atualizacoes, "membros")
+    assert filtrado["requerente"] == {"idade_anos": 70}
+
+
+def test_renda_zero_do_requerente_e_aceita_na_etapa_renda():
+    atualizacoes = {"requerente": {"renda_trabalho": 0}}
+    assert filtrar_atualizacoes_vazias(atualizacoes, "renda") == atualizacoes
+
+
+def test_renda_maior_que_zero_do_requerente_e_aceita_a_qualquer_hora():
+    atualizacoes = {"requerente": {"renda_trabalho": 800}}
+    assert filtrar_atualizacoes_vazias(atualizacoes, "rota") == atualizacoes
+
+
+def test_renda_zero_de_outro_membro_e_descartada_fora_da_etapa_renda():
+    atualizacoes = {"outros_membros": [{"idade_anos": 40, "renda_trabalho": 0}]}
+    filtrado = filtrar_atualizacoes_vazias(atualizacoes, "membros")
+    assert filtrado["outros_membros"] == [{"idade_anos": 40}]
+
+
+def test_renda_maior_que_zero_de_outro_membro_e_aceita_fora_da_etapa_renda():
+    atualizacoes = {"outros_membros": [{"idade_anos": 40, "renda_trabalho": 2000}]}
+    filtrado = filtrar_atualizacoes_vazias(atualizacoes, "membros")
+    assert filtrado["outros_membros"] == atualizacoes["outros_membros"]

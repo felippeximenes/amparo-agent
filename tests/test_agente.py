@@ -85,20 +85,36 @@ def test_fluxo_elegibilidade_sem_llm_pede_a_rota():
     assert "deficiência" in final["resposta"]
 
 
-def test_atalho_quando_a_primeira_fala_ja_tem_tudo():
-    """Se o LLM extrai o Caso completo numa só fala, avalia direto — sem
-    perguntar mais nada (comportamento equivalente ao de antes do P2)."""
-    tudo = {
-        "rota": "idade",
-        "requerente": {"idade_anos": 68, "renda_trabalho": 0},
-        "outros_membros": [],
-        "deducoes_saude": [],
-    }
-    grafo = construir_grafo(FakeLLM(atualizacoes=[tudo]))
-    final = grafo.invoke({"pergunta": "tenho 68 anos e não tenho renda, tenho direito?"})
-    assert final["avaliacao"].resultado is Resultado.ATENDE
-    assert final["aguardando"] is None
-    assert final["caso"] is not None
+def test_primeira_fala_completa_ainda_confirma_as_etapas_vazias():
+    """Dados não vazios (rota, idade) da primeira fala são aproveitados de
+    cara — mas confirmações vazias (mora só, sem renda) só valem quando
+    respondem à pergunta certa: a coleta pede membros, renda e saúde de
+    novo, uma por vez, mesmo já tendo sido "ditas" na primeira fala."""
+    grafo = construir_grafo(
+        FakeLLM(
+            atualizacoes=[
+                {"rota": "idade", "requerente": {"idade_anos": 70}, "outros_membros": []},
+                {"outros_membros": []},
+                {"requerente": {"renda_trabalho": 0}},
+                {"deducoes_saude": []},
+            ]
+        )
+    )
+    estado: dict = {}
+    falas = [
+        "minha mãe tem 70 anos, mora sozinha e não tem renda, ela tem direito ao bpc?",
+        "sim, mora só",
+        "nenhuma renda",
+        "não",
+    ]
+    estado = grafo.invoke({**estado, "pergunta": falas[0]})
+    assert estado["aguardando"] == "membros"  # idade ficou; "mora sozinha" ainda não foi confirmado
+
+    for fala in falas[1:]:
+        estado = grafo.invoke({**estado, "pergunta": fala})
+
+    assert estado["avaliacao"].resultado is Resultado.ATENDE
+    assert estado["aguardando"] is None
 
 
 def test_coleta_pergunta_um_dado_por_vez():
@@ -221,6 +237,37 @@ def test_regressao_irmao_com_renda_junto_derruba_para_nao_atende():
     for fala in falas:
         estado = grafo.invoke({**estado, "pergunta": fala})
     assert estado["avaliacao"].resultado is Resultado.NAO_ATENDE
+
+
+# --- regressão (Passo 0): confirmação vazia exige a etapa certa -------------
+
+def test_regressao_outros_membros_vazio_fora_da_etapa_membros_e_descartado():
+    """Um LLM que devolve outros_membros=[] respondendo à pergunta de idade
+    (bug/alucinação) não fecha a etapa de membros — ela é perguntada."""
+    grafo = construir_grafo(
+        FakeLLM(atualizacoes=[{}, {"rota": "idade"}, {"outros_membros": []}])
+    )
+    estado: dict = {}
+    for fala in ("Minha mãe tem direito ao BPC?", "Por idade", "qualquer coisa"):
+        estado = grafo.invoke({**estado, "pergunta": fala})
+    assert estado["aguardando"] == "idade"
+
+
+def test_regressao_renda_de_membro_mencionada_antes_da_hora_e_aproveitada():
+    """Valor NÃO vazio (renda > 0 de um membro) é aproveitado mesmo chegando
+    antes de a etapa de renda ser perguntada — só a confirmação vazia exige
+    a etapa certa, não o dado real."""
+    grafo = construir_grafo(
+        FakeLLM(
+            atualizacoes=[{"outros_membros": [{"idade_anos": 40, "renda_trabalho": 2000}]}]
+        )
+    )
+    final = grafo.invoke(
+        {"pergunta": "Minha mãe tem direito? Mora com o filho que ganha 2000"}
+    )
+    assert final["caso_parcial"]["outros_membros"] == [
+        {"idade_anos": 40, "renda_trabalho": 2000}
+    ]
 
 
 def test_fluxo_duvida_sem_indice_ainda_responde_com_disclaimer(monkeypatch):

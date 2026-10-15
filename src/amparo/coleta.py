@@ -104,6 +104,51 @@ def marcar_etapas_respondidas(caso_parcial: Mapping) -> dict:
     return resultado
 
 
+def _eh_vazio(valor) -> bool:
+    return valor == 0 or valor == []
+
+
+def _filtrar_renda_do_membro(membro: Mapping) -> dict:
+    """Remove os campos de renda com valor vazio (0 ou []) de um membro —
+    usado fora da etapa "renda", onde zero ainda não é uma resposta, é a
+    ausência de uma. Campos não vazios (idade, renda > 0...) são mantidos."""
+    return {
+        chave: valor
+        for chave, valor in membro.items()
+        if not (chave in _CAMPOS_RENDA and _eh_vazio(valor))
+    }
+
+
+def filtrar_atualizacoes_vazias(atualizacoes: Mapping, aguardando: str | None) -> dict:
+    """Uma confirmação VAZIA (outros_membros=[], renda zero, deducoes_saude=[])
+    só é aceita quando responde à pergunta que de fato foi feita (`aguardando`
+    é a etapa correspondente — "membros", "renda" ou "saude"); fora disso é
+    descartada e a pergunta daquela etapa é repetida (nunca por inferência).
+    Valor NÃO vazio (pessoas, renda > 0, gastos de saúde) é sempre aproveitado,
+    não importa quando chegou."""
+    filtrado = dict(atualizacoes)
+
+    if filtrado.get("outros_membros") == [] and aguardando != "membros":
+        del filtrado["outros_membros"]
+
+    if filtrado.get("deducoes_saude") == [] and aguardando != "saude":
+        del filtrado["deducoes_saude"]
+
+    if aguardando != "renda":
+        if "requerente" in filtrado:
+            requerente = _filtrar_renda_do_membro(filtrado["requerente"])
+            if requerente:
+                filtrado["requerente"] = requerente
+            else:
+                del filtrado["requerente"]
+        if "outros_membros" in filtrado:
+            filtrado["outros_membros"] = [
+                _filtrar_renda_do_membro(m) for m in filtrado["outros_membros"]
+            ]
+
+    return filtrado
+
+
 def fundir_caso_parcial(atual: Mapping, novo: Mapping) -> dict:
     """Funde os campos NOVOS (extraídos pelo LLM da última fala) no que já
     foi coletado. `requerente` é mesclado campo a campo; os demais campos —
