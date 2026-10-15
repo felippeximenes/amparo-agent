@@ -17,6 +17,7 @@ import json
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
 
+from amparo.coleta import filtrar_grupo_familiar
 from amparo.rules.elegibilidade import (
     Caso,
     CategoriaDeducao,
@@ -82,7 +83,8 @@ def caso_de_dict(d: dict) -> Caso | None:
 
     try:
         requerente = _membro_de_dict(requerente_raw)
-        outros = tuple(_membro_de_dict(m) for m in (d.get("outros_membros") or []))
+        outros_raw = filtrar_grupo_familiar(d.get("outros_membros") or [])
+        outros = tuple(_membro_de_dict(m) for m in outros_raw)
     except (TypeError, ValueError, InvalidOperation):
         return None
 
@@ -160,11 +162,19 @@ possíveis, no MESMO formato do que já foi coletado:
   "rota": "idade" | "deficiencia",
   "requerente": {"idade_anos": int, "com_deficiencia": bool, "renda_trabalho": number,
                  "beneficios_previdenciarios": [number], "renda_excluida": number},
-  "outros_membros": [ {mesma forma do requerente} ],
+  "outros_membros": [ {mesma forma do requerente, mais:
+                 "parentesco": "conjuge"|"pai_mae"|"filho_enteado"|"irmao"|"tutelado"|"outro",
+                 "solteiro": true|false} ],
   "impedimento_min_2_anos": true | false,
   "deducoes_saude": ["medicamentos","consultas","fraldas","alimentacao_especial","centro_dia"]
 }
-"outros_membros" e "deducoes_saude" são a lista COMPLETA (não um item novo). Quando a
+Em "outros_membros", preencha "parentesco" sempre que a fala der a relação com o
+requerente. "solteiro" só importa para "filho_enteado" e "irmao" (só esses dois ficam
+de fora do grupo familiar se forem casados) — preencha true/false quando a pessoa
+disser o estado civil (ex.: "meu filho casado" → solteiro: false; "minha irmã
+solteira" → solteiro: true); se não for dito, não inclua o campo. Para cônjuge, pais
+ou tutelados, "solteiro" não é necessário. "outros_membros" e "deducoes_saude" são a
+lista COMPLETA (não um item novo). Quando a
 pessoa disser que mora só / ninguém mais mora na casa, devolva "outros_membros": []
 — lista vazia, EXPLÍCITA, não omita o campo. Quando disser que não tem gastos de
 saúde, devolva "deducoes_saude": [] — vazia, explícita. Quando disser que não tem

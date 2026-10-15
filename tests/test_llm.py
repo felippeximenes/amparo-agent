@@ -58,6 +58,39 @@ def test_beneficios_e_deducoes_desconhecidas_sao_tratados():
     assert avaliar(caso).resultado in set(Resultado)
 
 
+# --- grupo familiar: filho/irmão casado não entra no Caso -------------------
+
+def test_filho_casado_nao_entra_no_caso():
+    d = {
+        "rota": "idade",
+        "requerente": {"idade_anos": 70},
+        "outros_membros": [
+            {
+                "idade_anos": 40,
+                "parentesco": "filho_enteado",
+                "solteiro": False,
+                "renda_trabalho": 3000,
+            }
+        ],
+    }
+    caso = caso_de_dict(d)
+    assert caso is not None
+    assert caso.outros_membros == ()
+
+
+def test_filho_solteiro_entra_no_caso():
+    d = {
+        "rota": "idade",
+        "requerente": {"idade_anos": 70},
+        "outros_membros": [
+            {"idade_anos": 40, "parentesco": "filho_enteado", "solteiro": True}
+        ],
+    }
+    caso = caso_de_dict(d)
+    assert caso is not None
+    assert len(caso.outros_membros) == 1
+
+
 # --- interpretar_atualizacoes (parsing puro da saída do modelo) --------------
 
 def test_interpretar_atualizacoes_de_json_valido():

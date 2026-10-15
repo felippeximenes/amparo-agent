@@ -372,6 +372,73 @@ def test_regressao_irmao_com_renda_junto_derruba_para_nao_atende():
     assert estado["avaliacao"].resultado is Resultado.NAO_ATENDE
 
 
+# --- regressão (P5, Passo 0c): idade na 1a fala sem "rota" não é perdida ---
+# Reproduz o que o LLM real devolveu para "minha vó tem 68 anos e mora com
+# meu tio que é aposentado": idade e a renda do tio foram extraídas, mas
+# "rota" veio ausente (o prompt não instrui a inferir da idade).
+
+def test_regressao_idade_e_renda_de_outro_membro_na_primeira_fala_sao_aproveitadas():
+    grafo = construir_grafo(
+        FakeLLM(
+            atualizacoes=[
+                {
+                    "requerente": {"idade_anos": 68},
+                    "outros_membros": [
+                        {
+                            "idade_anos": 60,
+                            "parentesco": "outro",
+                            "beneficios_previdenciarios": [1621],
+                        }
+                    ],
+                }
+            ],
+            intencoes=["elegibilidade"],
+        )
+    )
+    final = grafo.invoke(
+        {"pergunta": "minha vó tem 68 anos e mora com meu tio que é aposentado"}
+    )
+    assert final["aguardando"] != "rota"  # a idade já dizia a rota
+    assert final["caso_parcial"]["rota"] == "idade"
+    assert final["caso_parcial"]["requerente"]["idade_anos"] == 68
+    assert final["caso_parcial"]["outros_membros"][0]["beneficios_previdenciarios"] == [1621]
+
+
+# --- regressão (P5, Passo 0d): filho/irmão casado fica fora do Caso --------
+
+def test_regressao_filho_casado_fica_fora_e_pode_dar_atende():
+    grafo = construir_grafo(
+        FakeLLM(
+            atualizacoes=[
+                {"rota": "idade", "requerente": {"idade_anos": 70}},
+                {
+                    "outros_membros": [
+                        {
+                            "idade_anos": 40,
+                            "parentesco": "filho_enteado",
+                            "solteiro": False,
+                            "renda_trabalho": 3000,
+                        }
+                    ]
+                },
+                {"requerente": {"renda_trabalho": 0}},
+                {"deducoes_saude": []},
+            ]
+        )
+    )
+    estado: dict = {}
+    falas = [
+        "Minha mãe de 70 anos tem direito ao BPC?",
+        "mora com meu filho casado que ganha 3000",
+        "ela não tem renda",
+        "sem gastos de saúde",
+    ]
+    for fala in falas:
+        estado = grafo.invoke({**estado, "pergunta": fala})
+    assert estado["caso"].outros_membros == ()  # filho casado não entra no Caso
+    assert estado["avaliacao"].resultado is Resultado.ATENDE
+
+
 # --- regressão (Passo 0): confirmação vazia exige a etapa certa -------------
 
 def test_regressao_outros_membros_vazio_fora_da_etapa_membros_e_descartado():

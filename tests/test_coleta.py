@@ -4,7 +4,9 @@
 from amparo.coleta import (
     PERGUNTAS,
     filtrar_atualizacoes_vazias,
+    filtrar_grupo_familiar,
     fundir_caso_parcial,
+    inferir_rota_por_idade,
     marcar_etapas_respondidas,
     proximo_dado_faltante,
 )
@@ -214,3 +216,75 @@ def test_renda_maior_que_zero_de_outro_membro_e_aceita_fora_da_etapa_renda():
     atualizacoes = {"outros_membros": [{"idade_anos": 40, "renda_trabalho": 2000}]}
     filtrado = filtrar_atualizacoes_vazias(atualizacoes, "membros")
     assert filtrado["outros_membros"] == atualizacoes["outros_membros"]
+
+
+# --- inferir_rota_por_idade: regressão do P0 (idade >= 65 sem rota) ---------
+# O LLM extrai idade_anos corretamente mas nem sempre preenche "rota" sozinho
+# — sem essa regra determinística, proximo_dado_faltante pede "rota" de novo
+# mesmo com a idade (>= 65) já coletada.
+
+def test_infere_rota_idade_quando_idoso_e_rota_ausente():
+    caso = {"requerente": {"idade_anos": 68}}
+    assert inferir_rota_por_idade(caso)["rota"] == "idade"
+
+
+def test_infere_rota_exatamente_nos_65_anos():
+    caso = {"requerente": {"idade_anos": 65}}
+    assert inferir_rota_por_idade(caso)["rota"] == "idade"
+
+
+def test_nao_infere_rota_para_menor_de_65():
+    caso = {"requerente": {"idade_anos": 40}}
+    assert "rota" not in inferir_rota_por_idade(caso)
+
+
+def test_nao_sobrescreve_rota_deficiencia_ja_informada():
+    """Mesmo com idade >= 65, se a pessoa já disse que é pela deficiência,
+    a inferência não pode sobrescrever a escolha dela."""
+    caso = {"rota": "deficiencia", "requerente": {"idade_anos": 70}}
+    assert inferir_rota_por_idade(caso)["rota"] == "deficiencia"
+
+
+def test_nao_falha_sem_requerente_ainda():
+    assert inferir_rota_por_idade({}) == {}
+
+
+def test_regressao_idade_dada_na_primeira_fala_nao_pede_rota_de_novo():
+    """Reproduz o bug: o LLM extrai só a idade (sem "rota") na primeira
+    fala — a etapa seguinte não pode ser "rota" de novo."""
+    caso_parcial = marcar_etapas_respondidas(
+        inferir_rota_por_idade({"requerente": {"idade_anos": 68}})
+    )
+    assert proximo_dado_faltante(caso_parcial) != "rota"
+    assert proximo_dado_faltante(caso_parcial) == "membros"
+
+
+# --- filtrar_grupo_familiar: filho/irmão só entra se solteiro ---------------
+# LOAS art. 20, §1º (CONTEXT.md, "Grupo familiar"): cônjuge/companheiro(a),
+# pais, tutelados sempre contam; filhos, enteados e irmãos só se SOLTEIROS.
+
+def test_filho_casado_fica_fora_do_grupo_familiar():
+    membros = [{"idade_anos": 40, "parentesco": "filho_enteado", "solteiro": False}]
+    assert filtrar_grupo_familiar(membros) == []
+
+
+def test_filho_solteiro_continua_no_grupo_familiar():
+    membros = [{"idade_anos": 40, "parentesco": "filho_enteado", "solteiro": True}]
+    assert filtrar_grupo_familiar(membros) == membros
+
+
+def test_irmao_casado_fica_fora_do_grupo_familiar():
+    membros = [{"idade_anos": 30, "parentesco": "irmao", "solteiro": False}]
+    assert filtrar_grupo_familiar(membros) == []
+
+
+def test_conjuge_entra_mesmo_sem_campo_solteiro():
+    membros = [{"idade_anos": 65, "parentesco": "conjuge"}]
+    assert filtrar_grupo_familiar(membros) == membros
+
+
+def test_estado_civil_desconhecido_nao_exclui():
+    """Sem resposta sobre o estado civil, a pessoa continua no grupo —
+    exclusão só quando se sabe explicitamente que é casado(a)."""
+    membros = [{"idade_anos": 40, "parentesco": "filho_enteado"}]
+    assert filtrar_grupo_familiar(membros) == membros

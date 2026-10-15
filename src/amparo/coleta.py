@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from amparo.rules.elegibilidade import IDADE_IDOSO
+
 PERGUNTAS: dict[str, dict] = {
     "rota": {
         "texto": (
@@ -33,8 +35,9 @@ PERGUNTAS: dict[str, dict] = {
     "membros": {
         "texto": (
             "Quem mora na mesma casa com ela? Me diga a idade de cada pessoa "
-            "(cônjuge, pais, filhos, irmãos solteiros) — ou \"mora só\", se "
-            "for o caso."
+            "(cônjuge, pais, filhos, irmãos) — se for filho(a) ou irmão(ã), "
+            "diga também se é casado(a) ou solteiro(a), porque só entra no "
+            "cálculo quem é solteiro. Ou \"mora só\", se for o caso."
         ),
         "opcoes": [],
     },
@@ -55,6 +58,38 @@ PERGUNTAS: dict[str, dict] = {
         "opcoes": ["Sim", "Não"],
     },
 }
+
+
+def inferir_rota_por_idade(caso_parcial: Mapping) -> dict:
+    """Se a rota ainda não foi informada mas a idade do requerente já é
+    conhecida e >= `IDADE_IDOSO`, só pode ser a rota "idade" — regra
+    determinística (CLAUDE.md regra 1), não depende do LLM ter dito isso
+    explicitamente. Sem essa regra, uma fala como "minha mãe tem 70 anos,
+    ela tem direito?" tinha a idade extraída mas a rota pedida de novo,
+    porque `proximo_dado_faltante` checa "rota" antes de checar idade."""
+    resultado = dict(caso_parcial)
+    if resultado.get("rota") in ("idade", "deficiencia"):
+        return resultado
+    idade_anos = (resultado.get("requerente") or {}).get("idade_anos")
+    if idade_anos and idade_anos >= IDADE_IDOSO:
+        resultado["rota"] = "idade"
+    return resultado
+
+
+_PARENTESCOS_QUE_EXIGEM_SOLTEIRO = frozenset({"filho_enteado", "irmao"})
+
+
+def filtrar_grupo_familiar(outros_membros: list[Mapping]) -> list[Mapping]:
+    """Só fazem parte do grupo familiar do BPC: cônjuge/companheiro(a), pais,
+    tutelados, e filhos/enteados/irmãos SOLTEIROS (LOAS art. 20, §1º — ver
+    CONTEXT.md, "Grupo familiar"). Um filho, enteado ou irmão casado não
+    entra no Caso. Estado civil desconhecido (não perguntado/respondido)
+    não exclui — a pessoa continua no grupo até se provar o contrário."""
+    return [
+        m
+        for m in outros_membros
+        if not (m.get("parentesco") in _PARENTESCOS_QUE_EXIGEM_SOLTEIRO and m.get("solteiro") is False)
+    ]
 
 
 def proximo_dado_faltante(caso_parcial: Mapping) -> str | None:

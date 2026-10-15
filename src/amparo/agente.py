@@ -44,6 +44,7 @@ from amparo.coleta import (
     PERGUNTAS,
     filtrar_atualizacoes_vazias,
     fundir_caso_parcial,
+    inferir_rota_por_idade,
     marcar_etapas_respondidas,
     proximo_dado_faltante,
 )
@@ -231,7 +232,10 @@ def construir_grafo(llm: LLM | None = None, checkpointer=None):
             caso_parcial = fundir_caso_parcial(caso_parcial, atualizacoes)
         # Nunca confia em marcador de etapa vindo do LLM — deriva da presença
         # explícita dos dados (regra 1 do CLAUDE.md: elegibilidade é código,
-        # não decisão do modelo).
+        # não decisão do modelo). Idem para a rota: se já se sabe a idade
+        # (>= 65), a rota é "idade" por regra determinística, não precisa de
+        # o LLM ter dito isso explicitamente.
+        caso_parcial = inferir_rota_por_idade(caso_parcial)
         caso_parcial = marcar_etapas_respondidas(caso_parcial)
 
         dado_faltante = proximo_dado_faltante(caso_parcial)
