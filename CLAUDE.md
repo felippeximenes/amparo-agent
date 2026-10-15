@@ -39,12 +39,22 @@ validado ponta a ponta — ver `ROADMAP.md`, Fase 5.
 ## Arquitetura
 
 ```
-LangGraph:
-  intake_node      → identifica a intenção (elegibilidade / checklist / dúvida geral)
-  eligibility_node → regra determinística pura (idade, renda, deficiência)
-  rag_node         → busca em Qdrant nos documentos curados em docs/sources/
-  fallback_node    → modelo com saída estruturada, só quando a rota determinística não resolve
-  response_node    → resposta final + citação de fonte + disclaimer
+LangGraph (`src/amparo/agente.py`):
+  intake       → intenção por LLM com saída estruturada (elegibilidade / checklist /
+                 dúvida / saudação / fora_de_escopo / apagar); sem LLM ou se a saída não
+                 der para interpretar, cai na classificação por palavra-chave. Em meio a
+                 uma coleta de elegibilidade, só um desvio claro (checklist, dúvida
+                 explícita ou apagar) interrompe — tudo o mais continua respondendo a
+                 pergunta pendente.
+      │
+      ├─ elegibilidade → regra determinística pura (idade, renda, deficiência);
+      │                  monta o Caso aos poucos, um dado por vez (`coleta.py`)
+      ├─ rag           → busca híbrida em Qdrant nos documentos curados em docs/sources/
+      └─ fallback      → saudação, fora de escopo (outro benefício/assunto) ou mensagem
+                         incompreensível — nunca decide elegibilidade, só orienta/encaminha
+      │
+  resposta     → texto final + citação de fonte + disclaimer (elegibilidade sempre por
+                 template, nunca pelo LLM — mantém o veredito e os números exatos)
 ```
 
 - **RAG**: Qdrant sobre corpus curado manualmente. Não usar crawler automático

@@ -10,13 +10,13 @@ Legenda: `[x]` feito · `[~]` parcial · `[ ]` a fazer
 
 ## Onde estamos (revisão de 15/10/2026)
 
-Último commit: 15/10/2026. **103 testes passando.**
+Último commit: 15/10/2026. **132 testes passando.**
 
 | Fase | Situação |
 |---|---|
 | 0 — Fundação | ✅ concluída |
 | 1 — Curadoria + RAG | ✅ concluída (recall@5 = 85%) — 1 fonte pendente |
-| 2 — Núcleo do agente | 🟡 ~85% — conversa multi-turno e memória de sessão prontas |
+| 2 — Núcleo do agente | 🟡 ~95% — falta só a avaliação ponta a ponta |
 | 3 — API HTTP | ⬜ não iniciada |
 | 4 — Canal WhatsApp | ⬜ não iniciada |
 | 5 — Demo web | ⬜ não iniciada |
@@ -31,7 +31,11 @@ confirmação vazia só na etapa certa) → resposta com fonte + disclaimer. O L
 (Ollama ou OpenAI, via endpoint compatível) extrai só os campos NOVOS de cada
 fala e redige a resposta do RAG. Um desvio de assunto no meio da coleta
 ("e quais documentos?") é respondido pelo RAG sem perder o que já foi
-coletado. Sessão expira em 24h sem mensagem ou na hora com "apagar".
+coletado. Sessão expira em 24h sem mensagem ou na hora com "apagar". A
+intenção agora é classificada pelo LLM (6 categorias, saída estruturada:
+elegibilidade/checklist/duvida/saudacao/fora_de_escopo/apagar), com a
+palavra-chave como fallback; saudação, fora de escopo, mensagem
+incompreensível e apagar passam pelo `fallback_node`.
 
 **Principais lacunas encontradas na revisão:**
 
@@ -48,8 +52,10 @@ coletado. Sessão expira em 24h sem mensagem ou na hora com "apagar".
    `CLAUDE.md` já não cita Bedrock.
 4. **Qdrant em modo arquivo** só aceita um processo — serve para o CLI, não
    para um servidor web/webhook com vários workers.
-5. Intenção classificada só por palavra-chave (frágil para fala coloquial) e
-   sem `fallback_node`.
+5. ~~**Intenção classificada só por palavra-chave e sem `fallback_node`.**~~
+   Resolvido em 15/10/2026: classificação pelo LLM (6 categorias) com a
+   palavra-chave como fallback; `fallback_node` trata saudação, fora de
+   escopo, mensagem incompreensível e confirma o apagar.
 
 ---
 
@@ -81,11 +87,8 @@ Já feito:
 - [x] **Conversa multi-turno** — `src/amparo/coleta.py` (`PERGUNTAS`, `proximo_dado_faltante`, `fundir_caso_parcial`, `marcar_etapas_respondidas`, código puro e testado) + `Estado.caso_parcial`/`aguardando`/`opcoes` em `agente.py`. O agente pergunta *um dado por vez* (rota → idade/impedimento → quem mora na casa → renda de cada um → gastos de saúde) e só chama `avaliar()` quando o `Caso` está completo; atalho se a primeira fala já tiver tudo; desvio de assunto no meio responde pelo RAG sem perder o `caso_parcial`. Nenhuma etapa é dada como respondida por um marcador do LLM — só pela presença explícita dos dados no `caso_parcial` (corrige um bug em que o modelo pulava a pergunta sobre quem mora na casa). `scripts/chat.py` carrega o `Estado` entre turnos (em memória no processo — persistência é o P3). `opcoes` de cada pergunta já no formato de botões para o WhatsApp.
 - [x] **Memória de sessão** — `src/amparo/sessao.py`: checkpointer do LangGraph (SQLite em dev, `./sessoes.db` gitignored; Postgres via `SESSION_DB_URL` reservado por configuração, não implementado) + `thread_id` = `session_id_de(identificador)` (HMAC-SHA256, nunca o telefone/CPF cru) + `limpar_sessoes_expiradas()` (sem mensagem há mais de `SESSION_TTL_HORAS`, padrão 24h, chamada a cada turno do `chat.py`) + comando "apagar"/"apagar meus dados"/"sair" apaga a thread na hora. Decisão registrada em `docs/adr/0002-memoria-de-sessao-e-lgpd.md`.
 - [x] Fluxo completo via CLI — `scripts/chat.py --sessao NOME` retoma a conversa entre execuções
-
-A fazer (nesta ordem):
-
-- [ ] **Intenção via LLM** com saída estruturada, mantendo a palavra-chave como fallback quando o LLM está fora
-- [ ] **`fallback_node`** — saudação, fora de escopo ("e o auxílio-doença?"), mensagem incompreensível → resposta educada + encaminhamento (INSS 135 / Defensoria)
+- [x] **Intenção via LLM** com saída estruturada (`llm.classificar_intencao` + `llm.interpretar_intencao`, 6 categorias) — mantém a palavra-chave como fallback quando o LLM está fora ou não dá para interpretar a saída. Em meio a uma coleta, só um desvio claro interrompe (checklist/dúvida/apagar vindos do LLM; só checklist se caiu na palavra-chave, que não é confiável para "dúvida").
+- [x] **`fallback_node`** — saudação (boas-vindas + o que o Amparo faz), fora de escopo ("e o auxílio-doença?" → só cubro BPC/LOAS, encaminha INSS 135/Meu INSS/Defensoria), mensagem incompreensível → pede para reformular com exemplo. "Apagar" também passa por aqui (confirma o texto); quem apaga de fato é o canal, lendo `Estado["intencao"]`.
 - [ ] **Avaliação ponta a ponta** — `scripts/eval_agente.py` com ~20 conversas-roteiro: veredito correto, fonte citada existe nos trechos, sem valores inventados (LLM-as-judge + checagens determinísticas)
 - [x] Alinhar `CLAUDE.md` e `README.md` com a stack real (sem Bedrock)
 

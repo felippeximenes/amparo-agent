@@ -5,7 +5,8 @@ Uso:  uv run python scripts/chat.py [--sessao NOME]
 Sem --sessao, a conversa é perdida ao sair (thread aleatória). Com
 --sessao NOME, ela persiste entre execuções (SQLite local, `thread_id` =
 `session_id_de(NOME)` — nunca NOME em claro; requer SESSION_SALT no .env).
-Digite "apagar", "apagar meus dados" ou "sair" para apagar a sessão na hora.
+Digite "apagar", "apagar meus dados" ou "sair" para apagar a sessão na hora
+(com LLM, frases naturais como "pode apagar meus dados?" também funcionam).
 
 Usa o LLM de `config.llm_*` (padrão: Ollama local). Sem LLM no ar, roda em modo
 template: a coleta de elegibilidade fica INDETERMINADO. Requer o índice do
@@ -18,7 +19,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from amparo.agente import construir_grafo  # noqa: E402
+from amparo.agente import Intencao, construir_grafo  # noqa: E402
 from amparo.llm import criar_llm  # noqa: E402
 from amparo.sessao import abrir_checkpointer, limpar_sessoes_expiradas, session_id_de  # noqa: E402
 
@@ -62,6 +63,9 @@ def main() -> None:
                     break
                 estado = grafo.invoke({"pergunta": pergunta}, config)
                 print("\n" + estado["resposta"] + "\n")
+                if estado.get("intencao") is Intencao.APAGAR:
+                    checkpointer.delete_thread(thread_id)
+                    break
         finally:
             if hasattr(llm, "resumo_uso") and getattr(llm, "tokens_entrada", 0):
                 print("[amparo] " + llm.resumo_uso())

@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from amparo.llm import caso_de_dict, interpretar_atualizacoes
+from amparo.llm import caso_de_dict, interpretar_atualizacoes, interpretar_intencao
 from amparo.rules.elegibilidade import CategoriaDeducao, Resultado, Rota, avaliar
 
 
@@ -82,3 +82,33 @@ def test_interpretar_atualizacoes_descarta_marcadores_de_etapa_do_modelo():
         '"renda_coletada": true, "saude_coletada": true}'
     )
     assert interpretar_atualizacoes(saida) == {"rota": "idade"}
+
+
+# --- interpretar_intencao (parsing puro da classificação de intenção) -------
+
+def test_interpretar_intencao_categoria_valida():
+    assert interpretar_intencao('{"intencao": "saudacao"}') == "saudacao"
+
+
+def test_interpretar_intencao_vazia_cai_para_none():
+    """`None` sinaliza "o LLM não respondeu nada usável" — quem chama cai na
+    classificação por palavra-chave, não no fallback de incompreensível."""
+    assert interpretar_intencao("") is None
+
+
+def test_interpretar_intencao_json_invalido_e_incompreensivel():
+    """O modelo respondeu algo, só não dá para interpretar — diferente de
+    não ter respondido nada."""
+    assert interpretar_intencao("não é json") == "incompreensivel"
+
+
+def test_interpretar_intencao_categoria_desconhecida_e_incompreensivel():
+    assert interpretar_intencao('{"intencao": "sei_nao"}') == "incompreensivel"
+
+
+def test_interpretar_intencao_sem_a_chave_intencao_e_incompreensivel():
+    assert interpretar_intencao('{"outra_coisa": 1}') == "incompreensivel"
+
+
+def test_interpretar_intencao_de_lista_json_e_incompreensivel():
+    assert interpretar_intencao('["saudacao"]') == "incompreensivel"

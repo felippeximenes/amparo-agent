@@ -33,6 +33,14 @@ class LLM(Protocol):
         `coleta.proximo_dado_faltante`, código puro."""
         ...
 
+    def classificar_intencao(self, pergunta: str) -> str | None:
+        """Classifica a fala numa das 6 categorias ("elegibilidade",
+        "checklist", "duvida", "saudacao", "fora_de_escopo", "apagar") ou
+        "incompreensivel" quando a saída do modelo não dá para interpretar.
+        `None` quando a chamada falha/está indisponível — quem chama cai na
+        classificação por palavra-chave (`agente.classificar_intencao`)."""
+        ...
+
     def responder(self, pergunta: str, trechos: list[dict]) -> str:
         """Redige a resposta em linguagem simples, fundamentada só nos `trechos`
         (cada um com `titulo`/`fonte`/`tag`), citando a fonte."""
@@ -113,6 +121,28 @@ def interpretar_atualizacoes(saida: str) -> dict:
     return dados
 
 
+_CATEGORIAS_INTENCAO = (
+    "elegibilidade", "checklist", "duvida", "saudacao", "fora_de_escopo", "apagar",
+)
+
+
+def interpretar_intencao(saida: str) -> str | None:
+    """Parsing puro da resposta do classificador de intenção. `None` quando o
+    modelo não respondeu nada usável (chamada falhou/está indisponível) —
+    nesse caso quem chama cai na classificação por palavra-chave. Uma
+    resposta não vazia que não é uma das 6 categorias válidas devolve
+    "incompreensivel": o modelo tentou e não deu para entender, o que é
+    diferente de não ter respondido nada."""
+    if not saida:
+        return None
+    try:
+        dados = json.loads(saida)
+    except json.JSONDecodeError:
+        return "incompreensivel"
+    categoria = dados.get("intencao") if isinstance(dados, dict) else None
+    return categoria if categoria in _CATEGORIAS_INTENCAO else "incompreensivel"
+
+
 # --- adaptador para endpoint compatível com OpenAI --------------------------------
 
 _SEM_RESPOSTA = (
@@ -145,6 +175,23 @@ aposentadorias/pensões/BPC. "renda_excluida" é estágio, aprendizagem, indeniz
 barragem, auxílio-inclusão. Se a última fala não trouxer nada novo sobre um campo, não
 o inclua no JSON. NÃO invente valores, e NÃO devolva nenhum campo além dos listados
 acima. Responda só o JSON."""
+
+_SYS_CLASSIFICAR_INTENCAO = """Você classifica a intenção de uma fala sobre o BPC/LOAS
+(Benefício de Prestação Continuada). Devolva SOMENTE um JSON {"intencao": "<categoria>"}
+com UMA destas categorias:
+"elegibilidade" — quer saber se tem (ou alguém tem) direito ao BPC, ou está respondendo
+  dados para essa verificação (idade, renda, quem mora na casa, deficiência, documentos
+  pessoais da avaliação...).
+"checklist" — quer saber quais documentos levar, como pedir, passo a passo, onde
+  solicitar o BPC.
+"duvida" — pergunta sobre regras do BPC/LOAS que não é elegibilidade nem checklist (ex.:
+  o que é o BPC, quem pode receber em geral, valor do benefício, prazo do INSS).
+"saudacao" — saudação, cumprimento ou pedido de ajuda genérico, sem conteúdo sobre o
+  BPC (ex.: "oi", "bom dia", "pode me ajudar?").
+"fora_de_escopo" — pergunta sobre outro benefício (auxílio-doença, aposentadoria,
+  pensão por morte...) ou assunto não relacionado ao BPC/LOAS.
+"apagar" — pede para apagar os dados da conversa, encerrar e excluir o que foi dito.
+Responda só o JSON, sem comentários."""
 
 _SYS_RESPONDER = """Você é o Amparo, uma ferramenta de orientação informativa e independente.
 NÃO é o INSS nem o governo. Responda à pergunta APENAS com base nos trechos oficiais
@@ -214,6 +261,10 @@ class ChatLLM:
         user = f"Já coletado até agora: {contexto}\n\nConversa:\n{transcricao}"
         saida = self._chat(_SYS_EXTRAIR_ATUALIZACOES, user, json_mode=True)
         return interpretar_atualizacoes(saida)
+
+    def classificar_intencao(self, pergunta: str) -> str | None:
+        saida = self._chat(_SYS_CLASSIFICAR_INTENCAO, pergunta, json_mode=True)
+        return interpretar_intencao(saida)
 
     def responder(self, pergunta: str, trechos: list[dict]) -> str:
         if not trechos:

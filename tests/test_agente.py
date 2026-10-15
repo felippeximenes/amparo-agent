@@ -14,14 +14,29 @@ from amparo.rules.elegibilidade import Caso, Membro, Resultado, Rota, avaliar
 
 class FakeLLM:
     """Implementa o Protocol LLM sem rede. `atualizacoes` é a fila de retornos
-    de `extrair_atualizacoes`, um por chamada (fila vazia → `{}`, sem novidade)."""
+    de `extrair_atualizacoes`, um por chamada (fila vazia → `{}`, sem
+    novidade). `intencoes`, se dado, é a fila de categorias que
+    `classificar_intencao` devolve (uma por chamada); `None` (não dado) faz
+    `classificar_intencao` sempre devolver `None` — cai na palavra-chave,
+    igual a quando não há sinal nenhum do LLM para a intenção."""
 
-    def __init__(self, atualizacoes: list[dict] | None = None, texto: str = "RESPOSTA DO MODELO"):
+    def __init__(
+        self,
+        atualizacoes: list[dict] | None = None,
+        texto: str = "RESPOSTA DO MODELO",
+        intencoes: list[str | None] | None = None,
+    ):
         self._fila = list(atualizacoes or [])
         self._texto = texto
+        self._fila_intencoes = list(intencoes) if intencoes is not None else None
 
     def extrair_atualizacoes(self, mensagens, caso_parcial):  # noqa: ARG002
         return self._fila.pop(0) if self._fila else {}
+
+    def classificar_intencao(self, pergunta):  # noqa: ARG002
+        if self._fila_intencoes is None:
+            return None
+        return self._fila_intencoes.pop(0) if self._fila_intencoes else None
 
     def responder(self, pergunta, trechos):  # noqa: ARG002
         return self._texto
@@ -41,6 +56,110 @@ class FakeLLM:
 )
 def test_classificar_intencao(pergunta, esperada):
     assert classificar_intencao(pergunta) is esperada
+
+
+# --- classificação de intenção pelo LLM: frases coloquiais reais -------------
+# O FakeLLM simula a categoria que um modelo bem-instruído devolveria para
+# cada fala — a palavra-chave (3 categorias) não distingue saudação, fora de
+# escopo ou apagar, e é frágil a erro de digitação/sem acento.
+
+@pytest.mark.parametrize(
+    "fala,categoria,esperada",
+    [
+        ("oi", "saudacao", Intencao.SAUDACAO),
+        ("boa tarde", "saudacao", Intencao.SAUDACAO),
+        ("bom dia, preciso de ajuda", "saudacao", Intencao.SAUDACAO),
+        ("oii, alguem pode me ajudar", "saudacao", Intencao.SAUDACAO),
+        ("quanto é o auxílio-doença?", "fora_de_escopo", Intencao.FORA_DE_ESCOPO),
+        (
+            "e a aposentadoria por invalidez, dá pra pedir junto?",
+            "fora_de_escopo",
+            Intencao.FORA_DE_ESCOPO,
+        ),
+        ("quero apagar meus dados", "apagar", Intencao.APAGAR),
+        ("pode apagar tudo que eu disse?", "apagar", Intencao.APAGAR),
+        ("minha vo tem 68 anos ela pode pegar o loas", "elegibilidade", Intencao.ELEGIBILIDADE),
+        ("quero saber se eu tenho direito", "elegibilidade", Intencao.ELEGIBILIDADE),
+        (
+            "beneficio da minha vó, quais documentos precisa?",
+            "checklist",
+            Intencao.CHECKLIST,
+        ),
+        ("como faço pra dar entrada no bpc", "checklist", Intencao.CHECKLIST),
+        ("o que é o bpc?", "duvida", Intencao.DUVIDA),
+        ("pra que serve a loas", "duvida", Intencao.DUVIDA),
+        ("qnto ganha quem recebe o bpc", "duvida", Intencao.DUVIDA),
+        ("asdkjh qwerty 123 blablabla", "incompreensivel", Intencao.INCOMPREENSIVEL),
+    ],
+)
+def test_classificacao_llm_cobre_frases_coloquiais(monkeypatch, fala, categoria, esperada):
+    from amparo import rag
+
+    monkeypatch.setattr(rag, "client", lambda: None)
+    monkeypatch.setattr(rag, "search", lambda *a, **k: [])
+    grafo = construir_grafo(FakeLLM(intencoes=[categoria]))
+    final = grafo.invoke({"pergunta": fala})
+    assert final["intencao"] is esperada
+
+
+# --- fallback_node: saudação, fora de escopo, incompreensível, apagar ------
+
+def test_saudacao_tem_boas_vindas_disclaimer_e_nao_fala_de_elegibilidade():
+    grafo = construir_grafo(FakeLLM(intencoes=["saudacao"]))
+    final = grafo.invoke({"pergunta": "oi"})
+    assert "BPC" in final["resposta"]
+    assert DISCLAIMER in final["resposta"]
+    assert final.get("avaliacao") is None
+
+
+def test_fora_de_escopo_encaminha_para_inss_ou_defensoria():
+    grafo = construir_grafo(FakeLLM(intencoes=["fora_de_escopo"]))
+    final = grafo.invoke({"pergunta": "quanto é o auxílio-doença?"})
+    assert "135" in final["resposta"] or "Defensoria" in final["resposta"]
+    assert DISCLAIMER in final["resposta"]
+
+
+def test_incompreensivel_pede_para_reformular_com_exemplo():
+    grafo = construir_grafo(FakeLLM(intencoes=["incompreensivel"]))
+    final = grafo.invoke({"pergunta": "asdkjh qwerty"})
+    assert "reformular" in final["resposta"].lower()
+    assert "?" in final["resposta"]  # traz um exemplo de pergunta
+
+
+def test_apagar_fica_marcado_na_intencao_para_o_canal_apagar_a_sessao():
+    """O grafo só confirma o texto — quem apaga de fato é o canal
+    (scripts/chat.py), lendo `intencao` depois do invoke()."""
+    grafo = construir_grafo(FakeLLM(intencoes=["apagar"]))
+    final = grafo.invoke({"pergunta": "quero apagar meus dados"})
+    assert final["intencao"] is Intencao.APAGAR
+    assert "apagar" in final["resposta"].lower()
+
+
+# --- desvio claro em meio à coleta: agora inclui dúvida explícita e apagar -
+
+def test_duvida_explicita_via_llm_interrompe_a_coleta_e_depois_retoma(monkeypatch):
+    from amparo import rag
+
+    monkeypatch.setattr(rag, "client", lambda: None)
+    monkeypatch.setattr(
+        rag, "search", lambda *a, **k: [{"texto": "x", "titulo": "t", "fonte": "u"}]
+    )
+    grafo = construir_grafo(FakeLLM(atualizacoes=[{}], intencoes=[None, "duvida"]))
+    estado = grafo.invoke({"pergunta": "Minha mãe tem direito ao BPC?"})
+    assert estado["aguardando"] == "rota"
+
+    estado = grafo.invoke({**estado, "pergunta": "o que é o bpc, afinal?"})
+    assert estado["intencao"] is Intencao.DUVIDA
+    assert estado["aguardando"] == "rota"  # não perdeu o que já tinha
+
+
+def test_apagar_via_llm_interrompe_a_coleta():
+    grafo = construir_grafo(FakeLLM(atualizacoes=[{}], intencoes=[None, "apagar"]))
+    estado = grafo.invoke({"pergunta": "Minha mãe tem direito ao BPC?"})
+    assert estado["aguardando"] == "rota"
+
+    estado = grafo.invoke({**estado, "pergunta": "na verdade apaga meus dados"})
+    assert estado["intencao"] is Intencao.APAGAR
 
 
 # --- compor_resposta (puro) --------------------------------------------------
@@ -65,6 +184,20 @@ def test_resposta_do_rag_usa_o_texto_do_llm_quando_ha():
                             texto_rag="explicação simples do modelo")
     assert "explicação simples do modelo" in texto
     assert "Segundo as fontes oficiais" not in texto  # template não é usado
+
+
+def test_texto_fallback_tem_prioridade_sobre_avaliacao_e_rag():
+    a = avaliar(Caso(rota=Rota.IDADE, requerente=Membro(idade_anos=70)))
+    texto = compor_resposta(
+        texto_fallback="Oi! Sou o Amparo.",
+        avaliacao=a,
+        trechos=[{"texto": "x", "titulo": "t", "fonte": "u"}],
+        texto_rag="explicação do modelo",
+    )
+    assert "Oi! Sou o Amparo." in texto
+    assert "Pelos dados informados" not in texto
+    assert "explicação do modelo" not in texto
+    assert DISCLAIMER in texto
 
 
 def test_resposta_do_rag_sem_llm_cai_no_template_com_fonte():

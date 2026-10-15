@@ -7,20 +7,29 @@ turno para o outro sem precisar repassar o estado manualmente (ver
 `scripts/chat.py`). Sem `checkpointer` (como nos testes), cada `invoke()`
 começa do zero — por isso os testes repassam o estado anterior na mão.
 
-- `intake` classifica a intenção por palavra-chave; em meio a uma coleta
-  (`aguardando` setado), qualquer fala que não seja um desvio para o
-  checklist continua em elegibilidade.
+- `intake` classifica a intenção pelo LLM (saída estruturada: elegibilidade,
+  checklist, duvida, saudacao, fora_de_escopo, apagar); sem LLM, ou se a
+  saída não der para interpretar, cai na classificação por palavra-chave
+  (`classificar_intencao`, só distingue elegibilidade/checklist/duvida). Em
+  meio a uma coleta (`aguardando` setado), só um desvio claro interrompe —
+  checklist/duvida/apagar vindos do LLM, ou só checklist se a classificação
+  caiu na palavra-chave (ela não é confiável para distinguir uma resposta
+  curta de uma dúvida de verdade).
 - `elegibilidade` usa `llm.extrair_atualizacoes` + `coleta.fundir_caso_parcial`
   para ir montando o `caso_parcial` aos poucos; `coleta.proximo_dado_faltante`
   (código puro) decide se falta pergunta ou se já pode chamar `avaliar()`.
   Sem LLM, cada turno fica `INDETERMINADO` no primeiro dado que falta.
 - `rag` faz a busca híbrida; um desvio no meio da coleta passa por aqui sem
   tocar no `caso_parcial`, que a conversa retoma depois.
-- `resposta` compõe o texto: com LLM, `llm.responder` redige sobre os trechos;
-  sem LLM, template. A parte de elegibilidade é sempre template (mantém os
-  números e o veredito exatos). Disclaimer em toda resposta.
-
-`fallback_node` (saída estruturada do modelo) entra quando fizer falta.
+- `fallback` trata saudação, fora de escopo (outro benefício/assunto) e
+  mensagem incompreensível com texto fixo — nunca decide elegibilidade, só
+  orienta ou encaminha. "apagar" também passa por aqui (confirma o texto);
+  quem efetivamente apaga a sessão é o canal (`scripts/chat.py`), que lê
+  `Estado["intencao"]` depois do `invoke()`.
+- `resposta` compõe o texto: fallback tem prioridade; senão, com LLM,
+  `llm.responder` redige sobre os trechos; sem LLM, template. A parte de
+  elegibilidade é sempre template (mantém os números e o veredito exatos).
+  Disclaimer em toda resposta.
 """
 
 from __future__ import annotations
@@ -47,6 +56,20 @@ class Intencao(str, Enum):
     ELEGIBILIDADE = "elegibilidade"
     CHECKLIST = "checklist"
     DUVIDA = "duvida"
+    SAUDACAO = "saudacao"
+    FORA_DE_ESCOPO = "fora_de_escopo"
+    APAGAR = "apagar"
+    # Não faz parte do schema do LLM — é o que `agente` atribui quando a
+    # saída do modelo não dá para interpretar (ver `llm.interpretar_intencao`).
+    INCOMPREENSIVEL = "incompreensivel"
+
+
+# Desvio que interrompe uma coleta em andamento. A palavra-chave só distingue
+# elegibilidade/checklist/duvida e não dá para confiar nela para "duvida"
+# (uma resposta curta tipo "70 anos" cairia em duvida por default) — por
+# isso o conjunto é mais estrito quando a classificação vem da palavra-chave.
+_DESVIO_CLARO_COM_LLM = frozenset({Intencao.CHECKLIST, Intencao.DUVIDA, Intencao.APAGAR})
+_DESVIO_CLARO_PALAVRA_CHAVE = frozenset({Intencao.CHECKLIST})
 
 
 class Estado(TypedDict, total=False):
@@ -56,6 +79,7 @@ class Estado(TypedDict, total=False):
     aguardando: str | None           # qual passo de `coleta.PERGUNTAS` foi perguntado por último
     opcoes: list[str] | None         # opções curtas da pergunta pendente (futuros botões)
     intencao: Intencao
+    texto_fallback: str | None       # saudação / fora de escopo / incompreensível / apagar
     caso: Caso | None                # Caso completo, só quando a coleta termina
     avaliacao: Avaliacao | None
     trechos: list[dict]
@@ -103,16 +127,47 @@ def _linha_veredito(a: Avaliacao) -> str:
     return f"Pelos dados informados, ainda não é atendido um dos critérios. {a.motivo}"
 
 
+_BOAS_VINDAS = (
+    "Oi! Eu sou o Amparo — ajudo a entender e verificar o direito ao BPC/LOAS "
+    "(Benefício de Prestação Continuada), o benefício para pessoas idosas ou "
+    "com deficiência de baixa renda. Posso checar se você (ou alguém da sua "
+    "família) tem direito, e explicar os documentos e o passo a passo do "
+    "pedido. Me conte sua situação quando quiser."
+)
+_FORA_DE_ESCOPO_TEXTO = (
+    "Eu só ajudo com o BPC/LOAS — não tenho informação sobre outros "
+    "benefícios (como auxílio-doença, aposentadoria ou pensão) nem sobre "
+    "outros assuntos. Para isso, procure o INSS (telefone 135 ou pelo app/"
+    "site Meu INSS) ou a Defensoria Pública."
+)
+_INCOMPREENSIVEL_TEXTO = (
+    "Não entendi bem o que você quis dizer. Pode reformular? Por exemplo: "
+    "\"minha mãe tem 70 anos, ela tem direito ao BPC?\" ou \"quais documentos "
+    "preciso para pedir o BPC?\"."
+)
+_APAGAR_TEXTO = "Vou apagar os dados desta conversa agora."
+
+_TEXTO_FALLBACK = {
+    Intencao.SAUDACAO: _BOAS_VINDAS,
+    Intencao.FORA_DE_ESCOPO: _FORA_DE_ESCOPO_TEXTO,
+    Intencao.APAGAR: _APAGAR_TEXTO,
+    Intencao.INCOMPREENSIVEL: _INCOMPREENSIVEL_TEXTO,
+}
+
+
 def compor_resposta(
     *,
     avaliacao: Avaliacao | None = None,
     trechos: list[dict] | tuple = (),
     texto_rag: str | None = None,
     opcoes: list[str] | None = None,
+    texto_fallback: str | None = None,
 ) -> str:
     partes: list[str] = []
 
-    if avaliacao is not None:  # trilha de elegibilidade — sempre template exato
+    if texto_fallback is not None:  # saudação / fora de escopo / incompreensível / apagar
+        partes.append(texto_fallback)
+    elif avaliacao is not None:  # trilha de elegibilidade — sempre template exato
         partes.append(_linha_veredito(avaliacao))
         if avaliacao.renda_per_capita is not None and avaliacao.limite_renda is not None:
             partes.append(
@@ -144,11 +199,19 @@ def construir_grafo(llm: LLM | None = None, checkpointer=None):
     def no_intake(estado: Estado) -> dict:
         pergunta = estado.get("pergunta", "")
         mensagens = [*estado.get("mensagens", []), {"role": "usuario", "texto": pergunta}]
-        intencao_da_fala = classificar_intencao(pergunta)
-        # Em meio à coleta, qualquer fala que não seja um desvio claro para o
-        # checklist continua respondendo a pergunta pendente (ex.: "70 anos",
-        # "moro só" não batem com nenhuma palavra-chave e cairiam em DUVIDA).
-        if estado.get("aguardando") and intencao_da_fala is not Intencao.CHECKLIST:
+
+        categoria = llm.classificar_intencao(pergunta) if llm is not None else None
+        if categoria is not None:
+            intencao_da_fala = Intencao(categoria)
+            desvio_claro = _DESVIO_CLARO_COM_LLM
+        else:
+            intencao_da_fala = classificar_intencao(pergunta)
+            desvio_claro = _DESVIO_CLARO_PALAVRA_CHAVE
+
+        # Em meio à coleta, só um desvio claro interrompe — tudo o mais (ex.:
+        # "70 anos", "moro só", que a palavra-chave classificaria como DUVIDA
+        # por default) continua respondendo a pergunta pendente.
+        if estado.get("aguardando") and intencao_da_fala not in desvio_claro:
             intencao = Intencao.ELEGIBILIDADE
         else:
             intencao = intencao_da_fala
@@ -203,11 +266,16 @@ def construir_grafo(llm: LLM | None = None, checkpointer=None):
         trechos = rag.search(rag.client(), pergunta, k=4) if pergunta else []
         return {"trechos": trechos}
 
+    def no_fallback(estado: Estado) -> dict:
+        intencao = estado.get("intencao")
+        return {"texto_fallback": _TEXTO_FALLBACK[intencao]}
+
     def no_resposta(estado: Estado) -> dict:
         intencao = estado.get("intencao")
         em_elegibilidade = intencao is Intencao.ELEGIBILIDADE
         avaliacao = estado.get("avaliacao") if em_elegibilidade else None
         opcoes = estado.get("opcoes") if em_elegibilidade else None
+        texto_fallback = estado.get("texto_fallback")
 
         trechos = estado.get("trechos") or []
         texto_rag = None
@@ -215,28 +283,37 @@ def construir_grafo(llm: LLM | None = None, checkpointer=None):
             texto_rag = llm.responder(estado.get("pergunta", ""), trechos) or None
 
         resposta = compor_resposta(
-            avaliacao=avaliacao, trechos=trechos, texto_rag=texto_rag, opcoes=opcoes
+            avaliacao=avaliacao,
+            trechos=trechos,
+            texto_rag=texto_rag,
+            opcoes=opcoes,
+            texto_fallback=texto_fallback,
         )
         mensagens = [*estado.get("mensagens", []), {"role": "amparo", "texto": resposta}]
         return {"resposta": resposta, "mensagens": mensagens}
 
     def _rota(estado: Estado) -> str:
-        return (
-            "elegibilidade"
-            if estado.get("intencao") is Intencao.ELEGIBILIDADE
-            else "rag"
-        )
+        intencao = estado.get("intencao")
+        if intencao is Intencao.ELEGIBILIDADE:
+            return "elegibilidade"
+        if intencao in (Intencao.CHECKLIST, Intencao.DUVIDA):
+            return "rag"
+        return "fallback"
 
     g = StateGraph(Estado)
     g.add_node("intake", no_intake)
     g.add_node("elegibilidade", no_elegibilidade)
+    g.add_node("fallback", no_fallback)
     g.add_node("rag", no_rag)
     g.add_node("resposta", no_resposta)
     g.add_edge(START, "intake")
     g.add_conditional_edges(
-        "intake", _rota, {"elegibilidade": "elegibilidade", "rag": "rag"}
+        "intake",
+        _rota,
+        {"elegibilidade": "elegibilidade", "rag": "rag", "fallback": "fallback"},
     )
     g.add_edge("elegibilidade", "resposta")
     g.add_edge("rag", "resposta")
+    g.add_edge("fallback", "resposta")
     g.add_edge("resposta", END)
     return g.compile(checkpointer=checkpointer)
