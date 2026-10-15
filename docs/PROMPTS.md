@@ -16,6 +16,10 @@ Dicas:
 - Antes de colar um prompt grande, você pode pedir `use o plan mode` (ou
   `Shift+Tab`) para ele mostrar o plano antes de editar.
 - Prompts marcados **[você]** têm passos manuais seus (contas, chaves, número).
+- **Commits sem menção ao Claude**: a partir do P1 isso fica configurado
+  (`attribution` no `.claude/settings.json` + regra no `CLAUDE.md`). Se algum
+  commit sair com `Co-Authored-By: Claude`, peça: "refaça o último commit sem a
+  linha Co-Authored-By".
 
 ---
 
@@ -36,8 +40,27 @@ Não altere código nesta etapa. No fim, faça push da main e imprima um RESUMO 
 
 ## P1 — Salário mínimo 2026 + documentação alinhada
 
+**[você] antes de colar:** crie uma chave em platform.openai.com (API keys),
+coloque alguns dólares de crédito e crie o `.env` na raiz do projeto:
+
+```
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=sk-...sua-chave...
+LLM_PRECO_ENTRADA=0.15
+LLM_PRECO_SAIDA=0.60
+```
+
+(confira os preços atuais na página de pricing da OpenAI). O `.env` já está
+no `.gitignore` — nunca cole a chave no chat do Claude Code.
+
 ```
 Leia CLAUDE.md, ROADMAP.md (Fase 2, item "Atualizar parâmetros para 2026") e docs/adr/0001. Use a skill `tdd`.
+
+Passo 0 — configuração do repositório (commit separado, tipo chore):
+a) Commits deste projeto NÃO devem ter "Co-Authored-By: Claude" nem qualquer menção ao Claude. Crie/atualize `.claude/settings.json` (versionado) com a chave `attribution` vazia para commit e PR (consulte a documentação de settings do Claude Code para o formato exato) e adicione em CLAUDE.md, seção Convenções: "Commits e PRs sem trailer Co-Authored-By nem menção ao Claude; autor = configuração git local."
+b) Na minha máquina há interceptação de TLS (antivírus/rede) e o Python não confia no certificado — no P0 foi preciso injetar `truststore` à mão. Torne isso permanente sem afetar outras máquinas: adicione a dependência `truststore` e chame `truststore.inject_into_ssl()` num único ponto de entrada (ex.: início de `amparo/config.py`), protegido por try/except. Confirme que `uv run python scripts/ingest.py` roda sem workaround.
+c) O `.env` com a OpenAI já existe (não leia nem imprima a chave). Rode `uv run python scripts/chat.py` com as 2 perguntas do P0 e mostre as respostas e o custo estimado da sessão.
 
 Problema: `src/amparo/rules/elegibilidade.py` usa PARAMETROS_2025 (salário mínimo R$ 1.518, limite R$ 379,50). Em 2026 o SM é R$ 1.621 (limite 1/4 = R$ 405,25), vigente desde 01/01/2026.
 
