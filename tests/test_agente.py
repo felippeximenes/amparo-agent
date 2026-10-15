@@ -25,13 +25,20 @@ class FakeLLM:
         atualizacoes: list[dict] | None = None,
         texto: str = "RESPOSTA DO MODELO",
         intencoes: list[str | None] | None = None,
+        foco: dict[str, dict] | None = None,
     ):
         self._fila = list(atualizacoes or [])
         self._texto = texto
         self._fila_intencoes = list(intencoes) if intencoes is not None else None
+        self._foco = foco or {}
+        self.chamadas_foco: list[tuple[str, str]] = []
 
     def extrair_atualizacoes(self, mensagens, caso_parcial):  # noqa: ARG002
         return self._fila.pop(0) if self._fila else {}
+
+    def extrair_foco(self, pergunta, etapa):
+        self.chamadas_foco.append((pergunta, etapa))
+        return self._foco.get(etapa, {})
 
     def classificar_intencao(self, pergunta):  # noqa: ARG002
         if self._fila_intencoes is None:
@@ -437,6 +444,46 @@ def test_regressao_filho_casado_fica_fora_e_pode_dar_atende():
         estado = grafo.invoke({**estado, "pergunta": fala})
     assert estado["caso"].outros_membros == ()  # filho casado não entra no Caso
     assert estado["avaliacao"].resultado is Resultado.ATENDE
+
+
+# --- estabilidade da extração: 2ª tentativa focada na etapa pendente -------
+# Achado real do eval_agente: a fala responde à pergunta pendente, mas
+# extrair_atualizacoes às vezes não captura nada nesse turno. Em vez de
+# repetir a mesma pergunta na hora, tenta mais uma vez com extrair_foco,
+# um prompt restrito só àquela etapa.
+
+def test_retry_focado_quando_extracao_normal_nao_avanca_a_etapa():
+    fake = FakeLLM(
+        atualizacoes=[{"rota": "idade"}, {}],  # 2ª chamada "falha": nada extraído
+        foco={"idade": {"requerente": {"idade_anos": 70}}},
+    )
+    grafo = construir_grafo(fake)
+    estado = grafo.invoke({"pergunta": "Minha mãe tem direito ao BPC?"})
+    assert estado["aguardando"] == "idade"
+
+    final = grafo.invoke({**estado, "pergunta": "ela tem 70 anos"})
+    assert fake.chamadas_foco == [("ela tem 70 anos", "idade")]
+    assert final["aguardando"] == "membros"  # avançou graças ao foco
+
+
+def test_sem_retry_focado_na_primeira_fala():
+    """`aguardando` ainda é None no primeiro turno — não há etapa pendente
+    para focar, então não tenta de novo."""
+    fake = FakeLLM(atualizacoes=[{}], foco={"rota": {"rota": "idade"}})
+    grafo = construir_grafo(fake)
+    grafo.invoke({"pergunta": "tenho direito ao bpc?"})
+    assert fake.chamadas_foco == []
+
+
+def test_retry_focado_tenta_so_uma_vez():
+    """Se o foco também não resolver, a pergunta se repete — mas sem tentar
+    de novo indefinidamente (uma única chamada a extrair_foco por turno)."""
+    fake = FakeLLM(atualizacoes=[{"rota": "idade"}, {}], foco={})
+    grafo = construir_grafo(fake)
+    estado = grafo.invoke({"pergunta": "Minha mãe tem direito ao BPC?"})
+    final = grafo.invoke({**estado, "pergunta": "sei não"})
+    assert len(fake.chamadas_foco) == 1
+    assert final["aguardando"] == "idade"  # continua pedindo, mas só tentou uma vez
 
 
 # --- regressão (Passo 0): confirmação vazia exige a etapa certa -------------

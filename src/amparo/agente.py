@@ -18,7 +18,10 @@ começa do zero — por isso os testes repassam o estado anterior na mão.
 - `elegibilidade` usa `llm.extrair_atualizacoes` + `coleta.fundir_caso_parcial`
   para ir montando o `caso_parcial` aos poucos; `coleta.proximo_dado_faltante`
   (código puro) decide se falta pergunta ou se já pode chamar `avaliar()`.
-  Sem LLM, cada turno fica `INDETERMINADO` no primeiro dado que falta.
+  Sem LLM, cada turno fica `INDETERMINADO` no primeiro dado que falta. Se a
+  fala devia responder à pergunta pendente mas a etapa não avançou, tenta
+  mais uma vez com `llm.extrair_foco` (prompt restrito só àquela etapa)
+  antes de repetir a pergunta — estabilidade contra ruído de extração.
 - `rag` faz a busca híbrida; um desvio no meio da coleta passa por aqui sem
   tocar no `caso_parcial`, que a conversa retoma depois.
 - `fallback` trata saudação, fora de escopo (outro benefício/assunto) e
@@ -222,19 +225,32 @@ def construir_grafo(llm: LLM | None = None, checkpointer=None):
     def no_elegibilidade(estado: Estado) -> dict:
         caso_parcial = dict(estado.get("caso_parcial") or {})
         pergunta = estado.get("pergunta", "")
-        if llm is not None and pergunta:
-            atualizacoes = llm.extrair_atualizacoes(
-                estado.get("mensagens", []), caso_parcial
-            )
+        aguardando_anterior = estado.get("aguardando")
+
+        def _aplicar(atualizacoes: dict) -> None:
+            nonlocal caso_parcial
             # Uma confirmação vazia (outros_membros=[], renda zero,
             # deducoes_saude=[]) só vale se responde à etapa que foi de fato
             # perguntada — senão é descartada e a pergunta se repete.
-            atualizacoes = filtrar_atualizacoes_vazias(atualizacoes, estado.get("aguardando"))
+            atualizacoes = filtrar_atualizacoes_vazias(atualizacoes, aguardando_anterior)
             caso_parcial = fundir_caso_parcial(caso_parcial, atualizacoes)
             # Corrige um erro real do LLM: repetir a mesma aposentadoria/
             # pensão em renda_trabalho E em beneficios_previdenciarios, o
             # que bloquearia a exclusão de até 1 SM do idoso/deficiente.
             caso_parcial = deduplicar_renda(caso_parcial)
+
+        if llm is not None and pergunta:
+            _aplicar(llm.extrair_atualizacoes(estado.get("mensagens", []), caso_parcial))
+
+            etapa_apos_extracao = proximo_dado_faltante(
+                marcar_etapas_respondidas(inferir_rota_por_idade(caso_parcial))
+            )
+            if aguardando_anterior and etapa_apos_extracao == aguardando_anterior:
+                # Estabilidade (achado real do eval_agente): a fala deveria
+                # responder à pergunta pendente, mas o caso_parcial não
+                # mudou — tenta mais uma vez com um prompt focado só nessa
+                # etapa, em vez de repetir a pergunta na hora.
+                _aplicar(llm.extrair_foco(pergunta, aguardando_anterior))
         # Nunca confia em marcador de etapa vindo do LLM — deriva da presença
         # explícita dos dados (regra 1 do CLAUDE.md: elegibilidade é código,
         # não decisão do modelo). Idem para a rota: se já se sabe a idade

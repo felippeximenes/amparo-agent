@@ -17,7 +17,7 @@ import json
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
 
-from amparo.coleta import filtrar_grupo_familiar
+from amparo.coleta import PERGUNTAS, filtrar_grupo_familiar
 from amparo.rules.elegibilidade import (
     Caso,
     CategoriaDeducao,
@@ -40,6 +40,12 @@ class LLM(Protocol):
         "incompreensivel" quando a saída do modelo não dá para interpretar.
         `None` quando a chamada falha/está indisponível — quem chama cai na
         classificação por palavra-chave (`agente.classificar_intencao`)."""
+        ...
+
+    def extrair_foco(self, pergunta: str, etapa: str) -> dict:
+        """Segunda tentativa de extração, focada numa única etapa pendente
+        (chave de `coleta.PERGUNTAS`) — usada só quando `extrair_atualizacoes`
+        não avançou aquela etapa apesar de a fala responder a ela."""
         ...
 
     def responder(self, pergunta: str, trechos: list[dict]) -> str:
@@ -204,6 +210,43 @@ barragem, auxílio-inclusão. Se a última fala não trouxer nada novo sobre um 
 o inclua no JSON. NÃO invente valores, e NÃO devolva nenhum campo além dos listados
 acima. Responda só o JSON."""
 
+# Segunda tentativa de extração (ver `ChatLLM.extrair_foco`): o esquema aqui é
+# só o campo daquela etapa, não o schema inteiro de `_SYS_EXTRAIR_ATUALIZACOES`.
+_FOCO_SCHEMA_POR_ETAPA: dict[str, str] = {
+    "rota": '{"rota": "idade" | "deficiencia"}',
+    "idade": '{"requerente": {"idade_anos": int}}',
+    "impedimento": '{"impedimento_min_2_anos": true | false}',
+    "membros": (
+        '{"outros_membros": [ {"idade_anos": int, "com_deficiencia": bool, '
+        '"parentesco": "conjuge"|"pai_mae"|"filho_enteado"|"irmao"|"tutelado"|"outro", '
+        '"solteiro": true|false} ] }  — a lista COMPLETA de quem mora na casa '
+        "(sem o requerente); [] se a pessoa mora só."
+    ),
+    "renda": (
+        '{"requerente": {"renda_trabalho": number, "beneficios_previdenciarios": [number], '
+        '"renda_excluida": number}, "outros_membros": [ {mesmos 3 campos de renda} ] }  — '
+        "renda_trabalho: 0 explícito se a pessoa não tiver renda; aposentadoria/pensão/BPC "
+        "vai em beneficios_previdenciarios, nunca em renda_trabalho."
+    ),
+    "saude": (
+        '{"deducoes_saude": ["medicamentos","consultas","fraldas","alimentacao_especial","centro_dia"]} '
+        "— [] se não tiver gastos de saúde."
+    ),
+}
+
+
+def _sys_extrair_foco(etapa: str) -> str:
+    pergunta = PERGUNTAS[etapa]["texto"]
+    schema = _FOCO_SCHEMA_POR_ETAPA[etapa]
+    return (
+        "Você está extraindo UM dado específico para o BPC/LOAS, numa segunda "
+        f'tentativa. A pergunta feita à pessoa foi: "{pergunta}" A fala a seguir '
+        "é a resposta dela a essa pergunta específica. Devolva SOMENTE um JSON "
+        f"no formato: {schema}. Não devolva nenhum outro campo. Se a fala "
+        "realmente não responder a essa pergunta, devolva {}."
+    )
+
+
 _SYS_CLASSIFICAR_INTENCAO = """Você classifica a intenção de uma fala sobre o BPC/LOAS
 (Benefício de Prestação Continuada). Devolva SOMENTE um JSON {"intencao": "<categoria>"}
 com UMA destas categorias:
@@ -288,6 +331,10 @@ class ChatLLM:
         contexto = json.dumps(caso_parcial, ensure_ascii=False)
         user = f"Já coletado até agora: {contexto}\n\nConversa:\n{transcricao}"
         saida = self._chat(_SYS_EXTRAIR_ATUALIZACOES, user, json_mode=True)
+        return interpretar_atualizacoes(saida)
+
+    def extrair_foco(self, pergunta: str, etapa: str) -> dict:
+        saida = self._chat(_sys_extrair_foco(etapa), pergunta, json_mode=True)
         return interpretar_atualizacoes(saida)
 
     def classificar_intencao(self, pergunta: str) -> str | None:
