@@ -87,6 +87,24 @@ PARAMETROS_2025 = Parametros(
     },
 )
 
+# Valores do Anexo I (deduções de saúde) mantidos iguais a 2025 — a Portaria
+# Conjunta MDS/INSS 34/2025 não trouxe reajuste desses valores em docs/sources/;
+# conferir a cada ano se uma portaria nova atualiza o Anexo I.
+PARAMETROS_2026 = Parametros(
+    vigencia=date(2026, 1, 1),
+    salario_minimo=Decimal("1621.00"),
+    deducao_saude=PARAMETROS_2025.deducao_saude,
+)
+
+# Ordenados por vigência — fonte única para `parametros_vigentes`.
+_PARAMETROS = (PARAMETROS_2025, PARAMETROS_2026)
+
+
+def parametros_vigentes(data: date) -> Parametros:
+    """O `Parametros` com a maior `vigencia` que não é posterior a `data`."""
+    aplicaveis = [p for p in _PARAMETROS if p.vigencia <= data]
+    return max(aplicaveis, key=lambda p: p.vigencia)
+
 
 @dataclass(frozen=True)
 class Avaliacao:
@@ -120,7 +138,8 @@ def _renda_per_capita(caso: Caso, params: Parametros) -> Decimal:
     return liquida / Decimal(len(membros))
 
 
-def avaliar(caso: Caso, params: Parametros = PARAMETROS_2025) -> Avaliacao:
+def avaliar(caso: Caso, params: Parametros | None = None) -> Avaliacao:
+    params = params or parametros_vigentes(date.today())
     limite = _dec(params.salario_minimo) / Decimal(4)
     per_capita = _renda_per_capita(caso, params)
     renda_ok = per_capita <= limite

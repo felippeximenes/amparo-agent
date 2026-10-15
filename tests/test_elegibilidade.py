@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from amparo.rules.elegibilidade import (
     PARAMETROS_2025,
+    PARAMETROS_2026,
     Caso,
     CategoriaDeducao,
     Membro,
@@ -12,6 +13,7 @@ from amparo.rules.elegibilidade import (
     Resultado,
     Rota,
     avaliar,
+    parametros_vigentes,
 )
 
 SM = Decimal("1518.00")
@@ -39,7 +41,10 @@ def test_65_completos_com_renda_zero_atende():
 # --- critério de renda: bordas ---------------------------------------------------
 
 def test_renda_per_capita_exatamente_um_quarto_do_sm_atende():
-    r = avaliar(Caso(rota=Rota.IDADE, requerente=idoso(renda_trabalho=UM_QUARTO)))
+    r = avaliar(
+        Caso(rota=Rota.IDADE, requerente=idoso(renda_trabalho=UM_QUARTO)),
+        PARAMETROS_2025,
+    )
     assert r.resultado is Resultado.ATENDE
     assert r.renda_per_capita == UM_QUARTO
     assert r.limite_renda == UM_QUARTO
@@ -47,7 +52,8 @@ def test_renda_per_capita_exatamente_um_quarto_do_sm_atende():
 
 def test_um_centavo_acima_do_limite_nao_atende():
     r = avaliar(
-        Caso(rota=Rota.IDADE, requerente=idoso(renda_trabalho=Decimal("379.51")))
+        Caso(rota=Rota.IDADE, requerente=idoso(renda_trabalho=Decimal("379.51"))),
+        PARAMETROS_2025,
     )
     assert r.resultado is Resultado.NAO_ATENDE
     assert "renda" in r.motivo.lower()
@@ -211,6 +217,37 @@ def test_salario_minimo_diferente_muda_o_limite_de_renda():
     )
     assert r.limite_renda == Decimal("400")  # 1600 / 4
     assert r.resultado is Resultado.ATENDE  # 400 <= 400
+
+
+def test_parametros_vigentes_de_2025_antes_da_virada():
+    assert parametros_vigentes(date(2025, 12, 31)) is PARAMETROS_2025
+
+
+def test_parametros_vigentes_de_2026_a_partir_da_virada():
+    assert parametros_vigentes(date(2026, 1, 1)) is PARAMETROS_2026
+
+
+def test_renda_per_capita_exatamente_um_quarto_do_sm_2026_atende():
+    r = avaliar(
+        Caso(rota=Rota.IDADE, requerente=idoso(renda_trabalho=Decimal("405.25"))),
+        PARAMETROS_2026,
+    )
+    assert r.resultado is Resultado.ATENDE
+    assert r.limite_renda == Decimal("405.25")
+
+
+def test_um_centavo_acima_do_limite_2026_nao_atende():
+    r = avaliar(
+        Caso(rota=Rota.IDADE, requerente=idoso(renda_trabalho=Decimal("405.26"))),
+        PARAMETROS_2026,
+    )
+    assert r.resultado is Resultado.NAO_ATENDE
+
+
+def test_renda_entre_limites_2025_e_2026_so_atende_em_2026():
+    caso = Caso(rota=Rota.IDADE, requerente=idoso(renda_trabalho=Decimal("390.00")))
+    assert avaliar(caso, PARAMETROS_2025).resultado is Resultado.NAO_ATENDE
+    assert avaliar(caso, PARAMETROS_2026).resultado is Resultado.ATENDE
 
 
 def test_avaliacao_sempre_cita_fonte():
