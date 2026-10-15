@@ -68,6 +68,8 @@ LangGraph:
   checkboxes conforme o trabalho avança, não deixe a lista ficar desatualizada.
 - Commits e PRs sem trailer Co-Authored-By nem menção ao Claude; autor =
   configuração git local.
+- Nunca imprimir, logar ou repetir no resumo valores de segredos (`.env`,
+  chaves, salts, tokens) — no máximo dizer que a variável está configurada.
 
 ## Skills
 
