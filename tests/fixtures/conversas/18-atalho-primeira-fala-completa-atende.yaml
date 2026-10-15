@@ -1,0 +1,12 @@
+id: atalho-primeira-fala-completa-atende
+descricao: >
+  Primeira fala já traz dado NÃO vazio para toda etapa (esposa existe, renda
+  dela > 0, gasto de saúde real) — não depende de confirmação vazia, então
+  pode resolver rápido. Mede quantas perguntas o modelo ainda faz.
+falas:
+  - >-
+    Tenho 70 anos, moro com minha esposa que ganha 300 de pensão, e temos
+    gasto com remédio. Tenho direito ao BPC?
+esperado:
+  tipo: elegibilidade
+  resultado: atende

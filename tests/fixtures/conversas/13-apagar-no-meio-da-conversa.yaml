@@ -1,0 +1,8 @@
+id: apagar-no-meio-da-conversa
+descricao: Pedido de apagar os dados no meio de uma coleta de elegibilidade.
+falas:
+  - "Minha mãe tem 70 anos, ela tem direito ao BPC?"
+  - "quero apagar meus dados"
+esperado:
+  tipo: fallback
+  intencao: apagar

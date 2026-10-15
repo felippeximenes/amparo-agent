@@ -1,0 +1,11 @@
+id: desvio-documentos-no-meio-da-coleta-atende
+descricao: Desvio para checklist de documentos no meio da coleta; a conversa retoma e atende.
+falas:
+  - "Minha mãe tem 70 anos, ela tem direito ao BPC?"
+  - "e quais documentos eu preciso levar?"
+  - "mora sozinha"
+  - "não tem renda"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: atende

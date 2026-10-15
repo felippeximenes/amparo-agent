@@ -1,0 +1,10 @@
+id: idade-primeira-fala-atende
+descricao: Idade já vem na primeira fala; idosa sozinha sem renda atende.
+falas:
+  - "Minha mãe tem 70 anos, mora sozinha e não tem renda, ela tem direito ao BPC?"
+  - "sim, mora só"
+  - "nenhuma renda"
+  - "não"
+esperado:
+  tipo: elegibilidade
+  resultado: atende

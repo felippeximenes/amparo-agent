@@ -1,0 +1,10 @@
+id: filho-casado-fora-do-grupo-atende
+descricao: Filho casado não faz parte do grupo familiar (LOAS art. 20 §1º) — a renda dele não conta.
+falas:
+  - "Minha mãe tem 70 anos, ela tem direito ao BPC?"
+  - "mora com meu filho casado, que ganha 3000"
+  - "ela não tem renda"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: atende

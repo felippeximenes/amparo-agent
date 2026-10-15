@@ -1,0 +1,10 @@
+id: renda-exatamente-no-limite-atende
+descricao: Renda per capita exatamente R$ 405,25 (1/4 do SM de 2026) atende.
+falas:
+  - "Tenho 65 anos, tenho direito ao BPC?"
+  - "moro só"
+  - "ganho 405,25 de salário"
+  - "não tenho gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: atende

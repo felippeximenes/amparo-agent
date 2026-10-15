@@ -1,0 +1,11 @@
+id: deficiencia-impedimento-menor-2-anos-nao-atende
+descricao: Rota deficiência com impedimento de menos de 2 anos não atende.
+falas:
+  - "Tenho uma deficiência, tenho direito ao BPC?"
+  - "não, dura menos de 2 anos"
+  - "moro só"
+  - "não tenho renda"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: nao_atende

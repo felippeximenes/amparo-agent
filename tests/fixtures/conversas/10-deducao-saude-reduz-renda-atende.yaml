@@ -1,0 +1,10 @@
+id: deducao-saude-reduz-renda-atende
+descricao: Deduções de saúde (remédio + fralda) reduzem a renda per capita abaixo do limite.
+falas:
+  - "Tenho 65 anos, tenho direito ao BPC?"
+  - "moro só"
+  - "ganho 500 de salário"
+  - "sim, tenho gasto com remédio e fralda"
+esperado:
+  tipo: elegibilidade
+  resultado: atende

@@ -1,0 +1,7 @@
+id: saudacao-simples
+descricao: Saudação simples, sem conteúdo sobre o BPC.
+falas:
+  - "Oi, bom dia!"
+esperado:
+  tipo: fallback
+  intencao: saudacao

@@ -1,0 +1,10 @@
+id: renda-um-centavo-acima-nao-atende
+descricao: Renda per capita R$ 405,26 (um centavo acima do limite) não atende.
+falas:
+  - "Tenho 65 anos, tenho direito ao BPC?"
+  - "moro só"
+  - "ganho 405,26 de salário"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: nao_atende

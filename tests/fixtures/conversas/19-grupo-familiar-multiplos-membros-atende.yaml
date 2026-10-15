@@ -1,0 +1,10 @@
+id: grupo-familiar-multiplos-membros-atende
+descricao: Grupo familiar com 3 pessoas; renda de um membro dividida por todos ainda fica dentro do limite.
+falas:
+  - "Minha mãe tem 70 anos, ela tem direito ao BPC?"
+  - "mora com meu pai de 72 anos e minha irmã solteira de 20 anos"
+  - "meu pai recebe 800 de aposentadoria; minha irmã e minha mãe não têm renda"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: atende

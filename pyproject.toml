@@ -12,6 +12,7 @@ dependencies = [
     "openai>=1.40",
     "truststore>=0.9",
     "langgraph-checkpoint-sqlite>=2.0",
+    "pyyaml>=6.0",
 ]
 
 [dependency-groups]

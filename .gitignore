@@ -51,6 +51,7 @@ qdrant_data/
 # --- saídas de debug locais ---
 ingest.txt
 eval.txt
+eval_agente.json
 testes.txt
 bm25_idf.json
 

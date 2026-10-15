@@ -1,0 +1,7 @@
+id: fora-de-escopo-auxilio-doenca
+descricao: Pergunta sobre outro benefício (auxílio-doença), fora do escopo do Amparo.
+falas:
+  - "Quanto é o auxílio-doença?"
+esperado:
+  tipo: fallback
+  intencao: fora_de_escopo

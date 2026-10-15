@@ -1,0 +1,11 @@
+id: deficiencia-renda-alta-nao-atende
+descricao: Rota deficiência com impedimento de longo prazo mas renda alta não atende (por renda).
+falas:
+  - "Tenho uma deficiência, tenho direito ao BPC?"
+  - "sim, o impedimento dura mais de 2 anos"
+  - "moro só"
+  - "ganho 2000 de salário"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: nao_atende

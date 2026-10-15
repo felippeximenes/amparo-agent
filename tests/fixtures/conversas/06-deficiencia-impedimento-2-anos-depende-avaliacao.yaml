@@ -1,0 +1,11 @@
+id: deficiencia-impedimento-2-anos-depende-avaliacao
+descricao: Rota deficiência com impedimento de 2+ anos e renda ok depende da avaliação do INSS.
+falas:
+  - "Tenho uma deficiência, tenho direito ao BPC?"
+  - "sim, dura mais de 2 anos"
+  - "moro só"
+  - "não tenho renda"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: depende_de_avaliacao

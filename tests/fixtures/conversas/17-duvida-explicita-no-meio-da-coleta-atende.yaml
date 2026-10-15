@@ -1,0 +1,11 @@
+id: duvida-explicita-no-meio-da-coleta-atende
+descricao: Dúvida explícita ("o que é o BPC?") no meio da coleta; a conversa retoma e atende.
+falas:
+  - "Minha mãe tem 70 anos, ela tem direito ao BPC?"
+  - "o que é o BPC, afinal?"
+  - "mora sozinha"
+  - "não tem renda"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: atende

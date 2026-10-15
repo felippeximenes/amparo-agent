@@ -1,0 +1,10 @@
+id: bolsa-familia-conta-como-renda-nao-atende
+descricao: Bolsa Família entra na renda bruta (Decreto 12.534/2025) e derruba o pedido.
+falas:
+  - "Tenho 66 anos, tenho direito ao BPC?"
+  - "moro só"
+  - "recebo bolsa família de 600 reais"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: nao_atende

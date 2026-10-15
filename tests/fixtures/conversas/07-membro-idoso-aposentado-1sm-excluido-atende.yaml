@@ -1,0 +1,12 @@
+id: membro-idoso-aposentado-1sm-excluido-atende
+descricao: >
+  Irmão de 65 anos, aposentado, recebendo exatamente 1 salário mínimo —
+  esse benefício é excluído da renda (Portaria 34/2025 art. 8º, I).
+falas:
+  - "Minha mãe tem 90 anos, ela tem direito ao BPC?"
+  - "mora com meu irmão de 65 anos, que é aposentado e recebe 1621 de aposentadoria (um salário mínimo)"
+  - "ela não tem renda"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: atende

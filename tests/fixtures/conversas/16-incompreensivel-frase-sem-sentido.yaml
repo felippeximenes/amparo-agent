@@ -1,0 +1,10 @@
+id: incompreensivel-frase-sem-sentido
+descricao: >
+  Frase sem sentido nenhum. O modelo pode classificar como "incompreensivel"
+  ou, razoavelmente, como "fora_de_escopo" (não é sobre BPC) — aceitamos as
+  duas, já que ambas levam ao mesmo lugar: não inventar uma resposta.
+falas:
+  - "xkjh qwptz 8372 blablabla"
+esperado:
+  tipo: fallback
+  intencao: [incompreensivel, fora_de_escopo]

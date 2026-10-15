@@ -1,0 +1,10 @@
+id: irmao-solteiro-com-renda-conta-nao-atende
+descricao: Irmã solteira faz parte do grupo familiar — a renda dela conta e derruba o pedido.
+falas:
+  - "Minha mãe tem 70 anos, ela tem direito ao BPC?"
+  - "mora com minha irmã solteira, de 35 anos, que ganha 2000"
+  - "minha mãe não tem renda"
+  - "sem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: nao_atende

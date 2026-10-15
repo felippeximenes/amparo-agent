@@ -1,0 +1,10 @@
+id: idade-renda-alta-nao-atende
+descricao: Idoso sozinho com renda bem acima do limite não atende.
+falas:
+  - "Meu pai tem 68 anos, tem direito ao BPC?"
+  - "mora só"
+  - "ele ganha 3000 de aposentadoria"
+  - "não tem gastos de saúde"
+esperado:
+  tipo: elegibilidade
+  resultado: nao_atende

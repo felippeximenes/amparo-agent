@@ -27,6 +27,7 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "qdrant-client" },
     { name = "truststore" },
 ]
@@ -44,6 +45,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.40" },
     { name = "pydantic-settings", specifier = ">=2.5" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "qdrant-client", specifier = ">=1.12" },
     { name = "truststore", specifier = ">=0.9" },
 ]

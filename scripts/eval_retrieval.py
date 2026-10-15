@@ -19,7 +19,7 @@ from amparo import rag  # noqa: E402
 from amparo.config import settings  # noqa: E402
 
 # (pergunta, {prefixos de arquivo que respondem legitimamente})
-CASOS: list[tuple[str, set[str]]] = [
+CASOS_FORMAIS: list[tuple[str, set[str]]] = [
     ("Tenho 64 anos, posso pedir o BPC como idoso?", {"02", "06", "14"}),
     ("Qual é o limite de renda por pessoa da família para ter direito ao BPC?", {"02", "04", "08"}),
     ("Quem entra no grupo familiar para calcular a renda do BPC?", {"02", "08", "12"}),
@@ -41,6 +41,33 @@ CASOS: list[tuple[str, set[str]]] = [
     ("O BPC deixa pensão por morte para os herdeiros?", {"14", "15"}),
     ("Qual é a base na Constituição para o BPC?", {"01"}),
 ]
+
+# Como as pessoas escrevem no WhatsApp: sem acento, abreviado, "loas" em vez
+# de "BPC", gíria familiar ("minha vó", "o vovô").
+CASOS_COLOQUIAIS: list[tuple[str, set[str]]] = [
+    ("minha vo tem 66 anos e ganha pensao, ela pode pegar o loas?", {"02", "04", "06"}),
+    ("quanto pode ganhar de renda pra ter direito ao bpc", {"02", "04", "08"}),
+    ("quem entra na conta da renda pra calcular o loas", {"02", "08", "12"}),
+    ("bolsa familia conta como renda pro bpc?", {"09"}),
+    ("minha mae recebe bpc, isso conta pra eu pedir o do meu pai?", {"02", "05", "06", "08", "09"}),
+    ("como o inss avalia a deficiencia pro loas", {"03", "02", "13"}),
+    ("preciso estar no cadunico pra pedir o bpc", {"02", "12", "10"}),
+    ("de quanto em quanto tempo revisa o loas", {"02", "08", "12"}),
+    ("se eu comecar a trabalhar com carteira assinada perco o bpc?", {"02", "08", "12"}),
+    ("quem recebe bpc pode abrir mei?", {"02"}),
+    ("o bpc paga 13?", {"14", "15"}),
+    ("quem e aposentado pode receber o loas tbm?", {"02", "08"}),
+    ("como peco o bpc pela net, pelo meu inss", {"14", "15", "12"}),
+    ("meu cadunico ta atrasado ha tempo, perco o bpc?", {"02", "07", "08"}),
+    ("posso descontar gasto com remedio e fralda na conta da renda?", {"04", "12", "02"}),
+    ("estrangeiro que mora aqui pode pegar o loas?", {"12", "14", "15"}),
+    ("o que e impedimento de longo prazo", {"02", "03"}),
+    ("quanto tempo o inss demora pra responder o pedido", {"14", "15"}),
+    ("quando a pessoa que recebe bpc morre a familia recebe pensao?", {"14", "15"}),
+    ("onde fala do bpc na constituicao", {"01"}),
+]
+
+CASOS: list[tuple[str, set[str]]] = CASOS_FORMAIS + CASOS_COLOQUIAIS
 
 THRESHOLD = 0.8
 
