@@ -1,3 +1,14 @@
+try:
+    # Em algumas máquinas (antivírus/rede corporativa) o tráfego HTTPS passa por
+    # interceptação TLS com certificado que o certifi não reconhece, mas o
+    # Windows confia. truststore usa o trust store do SO em vez do certifi —
+    # sem efeito em máquinas sem esse cenário.
+    import truststore
+
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
