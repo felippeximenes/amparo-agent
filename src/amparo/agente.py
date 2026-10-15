@@ -28,7 +28,12 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from amparo import rag
-from amparo.coleta import PERGUNTAS, fundir_caso_parcial, proximo_dado_faltante
+from amparo.coleta import (
+    PERGUNTAS,
+    fundir_caso_parcial,
+    marcar_etapas_respondidas,
+    proximo_dado_faltante,
+)
 from amparo.disclaimer import DISCLAIMER
 from amparo.llm import LLM, caso_de_dict
 from amparo.rules.elegibilidade import Avaliacao, Caso, Resultado, avaliar
@@ -153,6 +158,10 @@ def construir_grafo(llm: LLM | None = None):
                 estado.get("mensagens", []), caso_parcial
             )
             caso_parcial = fundir_caso_parcial(caso_parcial, atualizacoes)
+        # Nunca confia em marcador de etapa vindo do LLM — deriva da presença
+        # explícita dos dados (regra 1 do CLAUDE.md: elegibilidade é código,
+        # não decisão do modelo).
+        caso_parcial = marcar_etapas_respondidas(caso_parcial)
 
         dado_faltante = proximo_dado_faltante(caso_parcial)
         if dado_faltante is not None:

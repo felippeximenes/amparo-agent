@@ -1,7 +1,12 @@
 """Coleta progressiva do Caso de elegibilidade (seam: `proximo_dado_faltante`,
 `fundir_caso_parcial`)."""
 
-from amparo.coleta import PERGUNTAS, fundir_caso_parcial, proximo_dado_faltante
+from amparo.coleta import (
+    PERGUNTAS,
+    fundir_caso_parcial,
+    marcar_etapas_respondidas,
+    proximo_dado_faltante,
+)
 
 
 # --- proximo_dado_faltante: ordem da coleta -----------------------------------
@@ -89,3 +94,60 @@ def test_fundir_substitui_lista_completa_de_outros_membros():
     atual = {"outros_membros": [{"idade_anos": 10}]}
     novo = {"outros_membros": [{"idade_anos": 10}, {"idade_anos": 40}]}
     assert fundir_caso_parcial(atual, novo)["outros_membros"] == novo["outros_membros"]
+
+
+# --- marcar_etapas_respondidas: deriva os marcadores da presença explícita ---
+# dos dados em caso_parcial — nunca de um marcador que o LLM tenha devolvido.
+
+def test_marca_membros_quando_outros_membros_presente_mesmo_vazio():
+    assert marcar_etapas_respondidas({"outros_membros": []})["membros_coletado"] is True
+
+
+def test_nao_marca_membros_sem_outros_membros():
+    assert marcar_etapas_respondidas({})["membros_coletado"] is False
+
+
+def test_marca_renda_quando_requerente_tem_renda_explicita_sem_outros_membros():
+    caso = {"outros_membros": [], "requerente": {"renda_trabalho": 0}}
+    assert marcar_etapas_respondidas(caso)["renda_coletada"] is True
+
+
+def test_nao_marca_renda_sem_renda_do_requerente():
+    caso = {"outros_membros": [], "requerente": {}}
+    assert marcar_etapas_respondidas(caso)["renda_coletada"] is False
+
+
+def test_nao_marca_renda_se_falta_renda_de_outro_membro():
+    caso = {
+        "outros_membros": [{"idade_anos": 40}],
+        "requerente": {"renda_trabalho": 0},
+    }
+    assert marcar_etapas_respondidas(caso)["renda_coletada"] is False
+
+
+def test_marca_renda_quando_todos_os_membros_tem_renda_explicita():
+    caso = {
+        "outros_membros": [{"idade_anos": 40, "renda_trabalho": 3000}],
+        "requerente": {"renda_trabalho": 0},
+    }
+    assert marcar_etapas_respondidas(caso)["renda_coletada"] is True
+
+
+def test_beneficio_ou_renda_excluida_tambem_contam_como_renda_explicita():
+    caso = {"outros_membros": [], "requerente": {"beneficios_previdenciarios": [1518]}}
+    assert marcar_etapas_respondidas(caso)["renda_coletada"] is True
+
+
+def test_marca_saude_quando_deducoes_saude_presente_mesmo_vazia():
+    assert marcar_etapas_respondidas({"deducoes_saude": []})["saude_coletada"] is True
+
+
+def test_nao_marca_saude_sem_deducoes_saude():
+    assert marcar_etapas_respondidas({})["saude_coletada"] is False
+
+
+def test_marcador_vindo_do_llm_e_sobrescrito_pela_checagem_real():
+    """Um `membros_coletado=True` (indevido, vindo do LLM ou de um estado
+    anterior inconsistente) é sobrescrito pela checagem real dos dados."""
+    caso = {"membros_coletado": True}
+    assert marcar_etapas_respondidas(caso)["membros_coletado"] is False

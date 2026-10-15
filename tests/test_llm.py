@@ -74,3 +74,11 @@ def test_interpretar_atualizacoes_de_json_invalido():
 
 def test_interpretar_atualizacoes_de_lista_json_e_ignorada():
     assert interpretar_atualizacoes('["idade"]') == {}
+
+
+def test_interpretar_atualizacoes_descarta_marcadores_de_etapa_do_modelo():
+    saida = (
+        '{"rota": "idade", "membros_coletado": true, '
+        '"renda_coletada": true, "saude_coletada": true}'
+    )
+    assert interpretar_atualizacoes(saida) == {"rota": "idade"}

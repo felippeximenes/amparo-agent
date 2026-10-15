@@ -76,6 +76,34 @@ def proximo_dado_faltante(caso_parcial: Mapping) -> str | None:
     return None
 
 
+_CAMPOS_RENDA = ("renda_trabalho", "beneficios_previdenciarios", "renda_excluida")
+
+
+def _membro_tem_renda_explicita(membro: Mapping) -> bool:
+    return any(campo in membro for campo in _CAMPOS_RENDA)
+
+
+def marcar_etapas_respondidas(caso_parcial: Mapping) -> dict:
+    """Deriva `membros_coletado`/`renda_coletada`/`saude_coletada` da presença
+    explícita dos dados em `caso_parcial` — NUNCA de um marcador que o LLM
+    tenha devolvido (por isso sempre sobrescreve os três, mesmo que já
+    existam). "Explícito" é a chave em si estar presente — uma lista vazia
+    ("mora só", "sem gastos") ou renda zero contam, desde que a pessoa tenha
+    respondido aquilo; a ausência da chave é "ainda não perguntado"."""
+    resultado = dict(caso_parcial)
+
+    resultado["membros_coletado"] = "outros_membros" in resultado
+
+    if resultado["membros_coletado"]:
+        membros = (resultado.get("requerente") or {}, *resultado.get("outros_membros", []))
+        resultado["renda_coletada"] = all(_membro_tem_renda_explicita(m) for m in membros)
+    else:
+        resultado["renda_coletada"] = False
+
+    resultado["saude_coletada"] = "deducoes_saude" in resultado
+    return resultado
+
+
 def fundir_caso_parcial(atual: Mapping, novo: Mapping) -> dict:
     """Funde os campos NOVOS (extraídos pelo LLM da última fala) no que já
     foi coletado. `requerente` é mesclado campo a campo; os demais campos —

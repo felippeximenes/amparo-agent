@@ -91,16 +91,26 @@ def caso_de_dict(d: dict) -> Caso | None:
     )
 
 
+_MARCADORES_DE_ETAPA = ("membros_coletado", "renda_coletada", "saude_coletada")
+
+
 def interpretar_atualizacoes(saida: str) -> dict:
     """Parsing puro da resposta do modelo para `extrair_atualizacoes`. JSON
-    inválido ou que não é um objeto devolve `{}` (nenhuma atualização)."""
+    inválido ou que não é um objeto devolve `{}` (nenhuma atualização).
+    Descarta qualquer marcador de etapa que o modelo devolva — quem decide
+    se uma etapa foi respondida é `coleta.marcar_etapas_respondidas`, a
+    partir da presença explícita dos dados, nunca da palavra do modelo."""
     if not saida:
         return {}
     try:
         dados = json.loads(saida)
     except json.JSONDecodeError:
         return {}
-    return dados if isinstance(dados, dict) else {}
+    if not isinstance(dados, dict):
+        return {}
+    for marcador in _MARCADORES_DE_ETAPA:
+        dados.pop(marcador, None)
+    return dados
 
 
 # --- adaptador para endpoint compatível com OpenAI --------------------------------
@@ -122,18 +132,19 @@ possíveis, no MESMO formato do que já foi coletado:
                  "beneficios_previdenciarios": [number], "renda_excluida": number},
   "outros_membros": [ {mesma forma do requerente} ],
   "impedimento_min_2_anos": true | false,
-  "deducoes_saude": ["medicamentos","consultas","fraldas","alimentacao_especial","centro_dia"],
-  "membros_coletado": true,
-  "renda_coletada": true,
-  "saude_coletada": true
+  "deducoes_saude": ["medicamentos","consultas","fraldas","alimentacao_especial","centro_dia"]
 }
-"outros_membros" e "deducoes_saude" são a lista COMPLETA (não um item novo). Marque
-"membros_coletado"/"renda_coletada"/"saude_coletada" como true quando a pessoa
-respondeu aquela pergunta, mesmo que a resposta seja "não" ou "nenhuma". "renda_trabalho"
-soma salário, trabalho informal, pró-labore e Bolsa Família. "beneficios_previdenciarios"
-são aposentadorias/pensões/BPC. "renda_excluida" é estágio, aprendizagem, indenização de
-barragem, auxílio-inclusão. Se a última fala não trouxer nada novo sobre um campo, não o
-inclua no JSON. NÃO invente valores. Responda só o JSON."""
+"outros_membros" e "deducoes_saude" são a lista COMPLETA (não um item novo). Quando a
+pessoa disser que mora só / ninguém mais mora na casa, devolva "outros_membros": []
+— lista vazia, EXPLÍCITA, não omita o campo. Quando disser que não tem gastos de
+saúde, devolva "deducoes_saude": [] — vazia, explícita. Quando disser que não tem
+renda (da pessoa ou de algum membro da casa), devolva "renda_trabalho": 0
+EXPLICITAMENTE para esse membro — não omita o campo. "renda_trabalho" soma salário,
+trabalho informal, pró-labore e Bolsa Família. "beneficios_previdenciarios" são
+aposentadorias/pensões/BPC. "renda_excluida" é estágio, aprendizagem, indenização de
+barragem, auxílio-inclusão. Se a última fala não trouxer nada novo sobre um campo, não
+o inclua no JSON. NÃO invente valores, e NÃO devolva nenhum campo além dos listados
+acima. Responda só o JSON."""
 
 _SYS_RESPONDER = """Você é o Amparo, uma ferramenta de orientação informativa e independente.
 NÃO é o INSS nem o governo. Responda à pergunta APENAS com base nos trechos oficiais

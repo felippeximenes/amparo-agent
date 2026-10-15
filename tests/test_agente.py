@@ -91,10 +91,8 @@ def test_atalho_quando_a_primeira_fala_ja_tem_tudo():
     tudo = {
         "rota": "idade",
         "requerente": {"idade_anos": 68, "renda_trabalho": 0},
-        "membros_coletado": True,
         "outros_membros": [],
-        "renda_coletada": True,
-        "saude_coletada": True,
+        "deducoes_saude": [],
     }
     grafo = construir_grafo(FakeLLM(atualizacoes=[tudo]))
     final = grafo.invoke({"pergunta": "tenho 68 anos e não tenho renda, tenho direito?"})
@@ -119,9 +117,9 @@ def test_conversa_multiturno_ate_o_veredito():
             atualizacoes=[
                 {"rota": "idade"},
                 {"requerente": {"idade_anos": 70}},
-                {"membros_coletado": True, "outros_membros": []},
-                {"renda_coletada": True, "requerente": {"renda_trabalho": 0}},
-                {"saude_coletada": True},
+                {"outros_membros": []},
+                {"requerente": {"renda_trabalho": 0}},
+                {"deducoes_saude": []},
             ]
         )
     )
@@ -168,6 +166,61 @@ def test_desvio_no_meio_da_coleta_responde_pelo_rag_e_mantem_o_caso_parcial(monk
     # a conversa retoma de onde parou
     estado = grafo.invoke({**estado, "pergunta": "70 anos"})
     assert estado["aguardando"] == "membros"
+
+
+# --- regressão: marcadores de etapa são do código, nunca do LLM -------------
+# (bug real: gpt-4o-mini pulava a pergunta de "membros" devolvendo
+# membros_coletado=true sem outros_membros — violava a regra 1 do CLAUDE.md)
+
+def test_regressao_a_rota_e_idade_em_falas_separadas_ainda_pede_membros():
+    grafo = construir_grafo(
+        FakeLLM(atualizacoes=[{}, {"rota": "idade"}, {"requerente": {"idade_anos": 70}}])
+    )
+    estado: dict = {}
+    for fala in ("Minha mãe tem direito ao BPC?", "Por idade", "Ela tem 70 anos"):
+        estado = grafo.invoke({**estado, "pergunta": fala})
+    assert estado["aguardando"] == "membros"
+
+
+def test_regressao_marcador_de_etapa_do_llm_e_ignorado():
+    grafo = construir_grafo(
+        FakeLLM(
+            atualizacoes=[
+                {
+                    "rota": "idade",
+                    "requerente": {"idade_anos": 70},
+                    "membros_coletado": True,  # o LLM não devolve mais isso; se devolver, é ignorado
+                    "renda_coletada": True,
+                    "saude_coletada": True,
+                }
+            ]
+        )
+    )
+    final = grafo.invoke({"pergunta": "Minha mãe de 70 anos tem direito ao BPC?"})
+    assert final["aguardando"] == "membros"
+
+
+def test_regressao_irmao_com_renda_junto_derruba_para_nao_atende():
+    grafo = construir_grafo(
+        FakeLLM(
+            atualizacoes=[
+                {"rota": "idade", "requerente": {"idade_anos": 70}},
+                {"outros_membros": [{"idade_anos": 40, "renda_trabalho": 3000}]},
+                {"requerente": {"renda_trabalho": 0}},
+                {"deducoes_saude": []},
+            ]
+        )
+    )
+    estado: dict = {}
+    falas = [
+        "Minha mãe de 70 anos tem direito ao BPC?",
+        "mora com meu irmão de 40 anos que ganha 3000",
+        "ela não tem renda",
+        "sem gastos de saúde",
+    ]
+    for fala in falas:
+        estado = grafo.invoke({**estado, "pergunta": fala})
+    assert estado["avaliacao"].resultado is Resultado.NAO_ATENDE
 
 
 def test_fluxo_duvida_sem_indice_ainda_responde_com_disclaimer(monkeypatch):

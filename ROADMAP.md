@@ -10,7 +10,7 @@ Legenda: `[x]` feito · `[~]` parcial · `[ ]` a fazer
 
 ## Onde estamos (revisão de 15/10/2026)
 
-Último commit: 15/10/2026. **65 testes passando.**
+Último commit: 15/10/2026. **79 testes passando.**
 
 | Fase | Situação |
 |---|---|
@@ -36,10 +36,10 @@ coletado.
 
 1. ~~**Cada mensagem é independente.**~~ Resolvido em 15/10/2026: conversa
    multi-turno (`src/amparo/coleta.py` + `Estado.caso_parcial`/`aguardando`
-   em `agente.py`). Ressalva: a extração por LLM às vezes infere um passo
-   (ex.: "mora só") como coletado antes de perguntar explicitamente — a
-   avaliação final continua correta (motor determinístico), mas o prompt de
-   extração pode ser afinado depois.
+   em `agente.py`). O LLM não decide mais quando uma etapa está respondida —
+   `coleta.marcar_etapas_respondidas` deriva isso da presença explícita dos
+   dados; corrigido um bug real em que o modelo pulava a pergunta de
+   "quem mora na casa" (regra 1 do CLAUDE.md).
 2. ~~**Salário mínimo desatualizado.**~~ Resolvido em 15/10/2026:
    `PARAMETROS_2026` (SM R$ 1.621, limite R$ 405,25) + `parametros_vigentes(data)`.
    Anexo I (deduções de saúde) conferido — sem reajuste na Portaria 34/2025.
@@ -77,7 +77,7 @@ Já feito:
 - [x] Citação obrigatória de fonte + disclaimer em toda resposta
 - [x] LLM plugado — `src/amparo/llm.py` (`ChatLLM`, Ollama ou OpenAI): extrai o `Caso` da fala (JSON) e redige a resposta do RAG; modo template quando não há LLM; contador de tokens/custo
 - [x] **Atualizar parâmetros para 2026** — `PARAMETROS_2026` (SM R$ 1.621) e `parametros_vigentes(data)` escolhe o parâmetro pela data; `avaliar()` usa o vigente hoje por padrão. Testes de borda em R$ 405,25. Anexo I conferido (sem reajuste).
-- [x] **Conversa multi-turno** — `src/amparo/coleta.py` (`PERGUNTAS`, `proximo_dado_faltante`, `fundir_caso_parcial`, código puro e testado) + `Estado.caso_parcial`/`aguardando`/`opcoes` em `agente.py`. O agente pergunta *um dado por vez* (rota → idade/impedimento → quem mora na casa → renda de cada um → gastos de saúde) e só chama `avaliar()` quando o `Caso` está completo; atalho se a primeira fala já tiver tudo; desvio de assunto no meio responde pelo RAG sem perder o `caso_parcial`. `scripts/chat.py` carrega o `Estado` entre turnos (em memória no processo — persistência é o P3). `opcoes` de cada pergunta já no formato de botões para o WhatsApp.
+- [x] **Conversa multi-turno** — `src/amparo/coleta.py` (`PERGUNTAS`, `proximo_dado_faltante`, `fundir_caso_parcial`, `marcar_etapas_respondidas`, código puro e testado) + `Estado.caso_parcial`/`aguardando`/`opcoes` em `agente.py`. O agente pergunta *um dado por vez* (rota → idade/impedimento → quem mora na casa → renda de cada um → gastos de saúde) e só chama `avaliar()` quando o `Caso` está completo; atalho se a primeira fala já tiver tudo; desvio de assunto no meio responde pelo RAG sem perder o `caso_parcial`. Nenhuma etapa é dada como respondida por um marcador do LLM — só pela presença explícita dos dados no `caso_parcial` (corrige um bug em que o modelo pulava a pergunta sobre quem mora na casa). `scripts/chat.py` carrega o `Estado` entre turnos (em memória no processo — persistência é o P3). `opcoes` de cada pergunta já no formato de botões para o WhatsApp.
 - [~] Fluxo completo via CLI — funciona multi-turno em memória no processo (sem persistir entre execuções — isso é o P3)
 
 A fazer (nesta ordem):
